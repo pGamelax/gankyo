@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { db } from "../db";
 import { report, reportInsumo, lancamento, talhao } from "../db/schema";
-import { eq, sum } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { auth } from "../auth";
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
@@ -42,7 +42,9 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       },
     });
     if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
-    if (r.userId !== session!.user.id) { set.status = 403; return { message: "Forbidden" }; }
+    const isOwner = r.userId === session!.user.id;
+    const isAdmin = session!.user.role === "admin";
+    if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
     return r;
   }, { params: t.Object({ id: t.String() }) })
   // Criar ordem de serviço (Iniciar Atividade)
@@ -116,13 +118,65 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       }),
     }
   )
+  // Editar lançamento
+  .patch(
+    "/:id/lancamentos/:lancId",
+    async ({ params, body, session, set }) => {
+      const lanc = await db.query.lancamento.findFirst({ where: eq(lancamento.id, params.lancId) });
+      if (!lanc) { set.status = 404; return { message: "Lançamento não encontrado" }; }
+      const r = await db.query.report.findFirst({ where: eq(report.id, lanc.reportId) });
+      if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
+      const isOwner = r.userId === session!.user.id;
+      const isAdmin = session!.user.role === "admin";
+      if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
+      const [updated] = await db
+        .update(lancamento)
+        .set({
+          ...(body.hectares !== undefined ? { hectares: body.hectares } : {}),
+          ...(body.status   !== undefined ? { status:   body.status   } : {}),
+          ...(body.data     !== undefined ? { data:     body.data     } : {}),
+        })
+        .where(eq(lancamento.id, params.lancId))
+        .returning();
+      return updated;
+    },
+    {
+      params: t.Object({ id: t.String(), lancId: t.String() }),
+      body: t.Object({
+        hectares: t.Optional(t.Number({ minimum: 0 })),
+        status:   t.Optional(t.Union([
+          t.Literal("iniciado"), t.Literal("andamento"),
+          t.Literal("finalizado"), t.Literal("iniciado_finalizado"),
+        ])),
+        data: t.Optional(t.String()),
+      }),
+    }
+  )
+  // Deletar lançamento
+  .delete(
+    "/:id/lancamentos/:lancId",
+    async ({ params, session, set }) => {
+      const lanc = await db.query.lancamento.findFirst({ where: eq(lancamento.id, params.lancId) });
+      if (!lanc) { set.status = 404; return { message: "Lançamento não encontrado" }; }
+      const r = await db.query.report.findFirst({ where: eq(report.id, lanc.reportId) });
+      if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
+      const isOwner = r.userId === session!.user.id;
+      const isAdmin = session!.user.role === "admin";
+      if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
+      await db.delete(lancamento).where(eq(lancamento.id, params.lancId));
+      return { success: true };
+    },
+    { params: t.Object({ id: t.String(), lancId: t.String() }) }
+  )
   // Remover ordem
   .delete(
     "/:id",
     async ({ params, session, set }) => {
       const r = await db.query.report.findFirst({ where: eq(report.id, params.id) });
       if (!r) { set.status = 404; return { message: "Não encontrado" }; }
-      if (r.userId !== session!.user.id) { set.status = 403; return { message: "Forbidden" }; }
+      const isOwner = r.userId === session!.user.id;
+      const isAdmin = session!.user.role === "admin";
+      if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
       await db.delete(report).where(eq(report.id, params.id));
       return { success: true };
     },

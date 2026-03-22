@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,8 +15,10 @@ import {
 import {
   ArrowLeft, Tractor, Layers, Activity, Plus,
   Loader2, Droplets, CheckCircle2, Clock, AlertCircle, Copy, Check, WifiOff,
+  Trash2, Pencil,
 } from "lucide-react";
 import { enqueue } from "@/lib/offline-queue";
+import { useSession } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_authenticated/reports/$id")({
   component: ReportDetailPage,
@@ -28,6 +30,7 @@ type Insumo     = { id: string; nome: string; recomendacaoHa: number };
 type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string };
 type ReportDetail = {
   id: string;
+  userId: string;
   createdAt: string;
   fazenda:  { id: string; name: string };
   talhao:   { id: string; codigo: string; area: number };
@@ -65,6 +68,7 @@ async function fetchReport(id: string): Promise<ReportDetail> {
 function ReportDetailPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
+  const { data: session } = useSession();
 
   const { data: report, isLoading, error } = useQuery({
     queryKey: ["reports", id],
@@ -74,6 +78,7 @@ function ReportDetailPage() {
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
   const [dialogOpen,      setDialogOpen     ] = useState(false);
+  const [editingLanc,     setEditingLanc    ] = useState<Lancamento | null>(null);
   const [copiedId,        setCopiedId       ] = useState<string | null>(null);
   const [hectares,        setHectares       ] = useState("");
   const [status,          setStatus         ] = useState<StatusValue>("iniciado");
@@ -116,6 +121,64 @@ function ReportDetailPage() {
     onError: (e) => setFormError(e.message),
   });
 
+  // Permissão: dono ou admin
+  const canEdit = !!report && (
+    session?.user?.id === report.userId || session?.user?.role === "admin"
+  );
+
+  // ── Deletar relatório ──────────────────────────────────────────────────────
+  const navigate = useNavigate();
+  const deleteReport = useMutation({
+    mutationFn: () =>
+      fetch(apiUrl(`/reports/${id}`), { method: "DELETE", credentials: "include" })
+        .then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      navigate({ to: "/reports" });
+    },
+  });
+
+  // ── Deletar lançamento ─────────────────────────────────────────────────────
+  const deleteLanc = useMutation({
+    mutationFn: (lancId: string) =>
+      fetch(apiUrl(`/reports/${id}/lancamentos/${lancId}`), { method: "DELETE", credentials: "include" })
+        .then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports", id] });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+    },
+  });
+
+  // ── Editar lançamento ──────────────────────────────────────────────────────
+  const editLanc = useMutation({
+    mutationFn: async (lancId: string) => {
+      const res = await fetch(apiUrl(`/reports/${id}/lancamentos/${lancId}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ hectares: haNum, status, data }),
+      });
+      if (!res.ok) throw new Error("Falha ao editar lançamento");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports", id] });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      closeDialog();
+    },
+    onError: (e) => setFormError(e.message),
+  });
+
+  function openEdit(l: Lancamento) {
+    setEditingLanc(l);
+    setHectares(String(l.hectares));
+    setStatus(l.status as StatusValue);
+    setData(l.data);
+    setFormError(null);
+    setOfflineQueued(false);
+    setDialogOpen(true);
+  }
+
   function copyLancamento(l: Lancamento) {
     if (!report) return;
     const data = new Date(l.data + "T12:00:00").toLocaleDateString("pt-BR");
@@ -145,8 +208,8 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
-  function closeDialog() { setDialogOpen(false); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
+  function openDialog()  { setEditingLanc(null); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
+  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
 
   async function handleLancar(e: React.FormEvent) {
     e.preventDefault();
@@ -166,6 +229,7 @@ function ReportDetailPage() {
       return;
     }
 
+    if (editingLanc) { editLanc.mutate(editingLanc.id); return; }
     lancar.mutate();
   }
 
@@ -202,6 +266,17 @@ function ReportDetailPage() {
             Iniciada em {new Date(report.createdAt).toLocaleDateString("pt-BR")}
           </p>
         </div>
+        {canEdit && (
+          <Button
+            variant="ghost" size="icon"
+            className="shrink-0 text-muted-foreground hover:text-destructive mt-0.5"
+            title="Excluir relatório"
+            onClick={() => { if (confirm("Excluir este relatório e todos os seus lançamentos?")) deleteReport.mutate(); }}
+            disabled={deleteReport.isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Localização + progresso */}
@@ -301,13 +376,12 @@ function ReportDetailPage() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-1">
                           {new Date(l.data + "T12:00:00").toLocaleDateString("pt-BR")}
                         </span>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant="ghost" size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-foreground"
                           onClick={() => copyLancamento(l)}
                         >
@@ -316,6 +390,25 @@ function ReportDetailPage() {
                             : <Copy className="h-3.5 w-3.5" />
                           }
                         </Button>
+                        {canEdit && (
+                          <>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              onClick={() => openEdit(l)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => { if (confirm("Excluir este lançamento?")) deleteLanc.mutate(l.id); }}
+                              disabled={deleteLanc.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
@@ -343,7 +436,7 @@ function ReportDetailPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Lançar Relatório</DialogTitle>
+            <DialogTitle>{editingLanc ? "Editar Lançamento" : "Lançar Relatório"}</DialogTitle>
             <DialogDescription>
               Informe os hectares realizados neste lançamento.
               {haRestante > 0 && (
