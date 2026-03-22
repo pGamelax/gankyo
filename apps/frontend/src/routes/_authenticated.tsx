@@ -12,13 +12,29 @@ import { OfflineBanner, SyncedBanner } from "@/components/offline-banner";
 import { useOnline } from "@/hooks/use-online";
 import { flushQueue, getQueue } from "@/lib/offline-queue";
 
+const SESSION_CACHE_KEY = "gankyo:session";
+
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
-    const { data: session } = await authClient.getSession();
-    if (!session) {
-      throw redirect({ to: "/login" });
+    // Tenta buscar a sessão da rede
+    const { data: session } = await authClient.getSession().catch(() => ({ data: null }));
+
+    if (session) {
+      // Salva no localStorage para uso offline
+      try { localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(session)); } catch {}
+      return { session };
     }
-    return { session };
+
+    // Sem sessão — verifica se está offline e tem sessão cacheada
+    if (!navigator.onLine) {
+      try {
+        const cached = localStorage.getItem(SESSION_CACHE_KEY);
+        if (cached) return { session: JSON.parse(cached) };
+      } catch {}
+    }
+
+    // Online sem sessão válida → login
+    throw redirect({ to: "/login" });
   },
   component: AuthenticatedLayout,
 });

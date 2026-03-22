@@ -30,6 +30,7 @@ export default function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const isAdmin = session?.user?.role === "admin";
 
   async function handleSignOut() {
+    try { localStorage.removeItem("gankyo:session"); } catch {}
     await signOut();
     navigate({ to: "/login" });
   }
