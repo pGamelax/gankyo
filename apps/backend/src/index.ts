@@ -5,6 +5,7 @@ import { auth } from "./auth";
 import { reportsRouter } from "./routes/reports";
 import { preferencesRouter } from "./routes/preferences";
 import { dashboardRouter } from "./routes/dashboard";
+import { programacaoRouter, regrasRouter } from "./routes/programacao";
 import { adminRouter } from "./routes/admin";
 import { activitiesRouter, activitiesAdminRouter } from "./routes/activities";
 import {
@@ -33,6 +34,8 @@ const app = new Elysia()
   .use(reportsRouter)
   .use(preferencesRouter)
   .use(dashboardRouter)
+  .use(programacaoRouter)
+  .use(regrasRouter)
   .use(activitiesRouter)
   .use(fazendasRouter)
   .use(talhoesRouter)

@@ -94,7 +94,7 @@ function AuthenticatedLayout() {
   }, [refreshCount]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       {/* Backdrop mobile */}
       {sidebarOpen && (
         <div
@@ -110,7 +110,13 @@ function AuthenticatedLayout() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header mobile */}
-        <header className="flex items-center gap-3 px-4 h-14 border-b bg-background shrink-0 md:hidden">
+        <header
+          className="flex items-center gap-3 px-4 border-b bg-background shrink-0 md:hidden"
+          style={{
+            paddingTop: "env(safe-area-inset-top)",
+            height: "calc(3.5rem + env(safe-area-inset-top))",
+          }}
+        >
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-1.5 rounded-md hover:bg-accent transition-colors"
@@ -132,7 +138,10 @@ function AuthenticatedLayout() {
           )}
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main
+          className="flex-1 overflow-y-auto p-4 md:p-6"
+          style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+        >
           <div className="max-w-5xl mx-auto w-full">
             <Outlet />
           </div>

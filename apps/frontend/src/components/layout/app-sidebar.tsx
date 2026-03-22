@@ -2,6 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   FileText,
+  CalendarDays,
   Settings,
   TreePine,
   LogOut,
@@ -12,9 +13,10 @@ import { cn } from "@/lib/utils";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const baseNavItems = [
-  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { label: "Relatórios", to: "/reports", icon: FileText },
-  { label: "Configurações", to: "/settings", icon: Settings },
+  { label: "Dashboard",   to: "/dashboard",   icon: LayoutDashboard },
+  { label: "Relatórios",  to: "/reports",     icon: FileText        },
+  { label: "Programação", to: "/programacao", icon: CalendarDays    },
+  { label: "Configurações", to: "/settings",  icon: Settings        },
 ] as const;
 
 interface AppSidebarProps {

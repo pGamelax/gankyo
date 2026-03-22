@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/reports/$id")({
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Insumo     = { id: string; nome: string; recomendacaoHa: number };
-type Lancamento = { id: string; hectares: number; status: string; createdAt: string };
+type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string };
 type ReportDetail = {
   id: string;
   createdAt: string;
@@ -71,10 +71,13 @@ function ReportDetailPage() {
     queryFn: () => fetchReport(id),
   });
 
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+
   const [dialogOpen,      setDialogOpen     ] = useState(false);
   const [copiedId,        setCopiedId       ] = useState<string | null>(null);
   const [hectares,        setHectares       ] = useState("");
   const [status,          setStatus         ] = useState<StatusValue>("iniciado");
+  const [data,            setData           ] = useState(todayStr());
   const [formError,       setFormError      ] = useState<string | null>(null);
   const [offlineQueued,   setOfflineQueued  ] = useState(false);
 
@@ -100,7 +103,7 @@ function ReportDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ hectares: haNum, status }),
+        body: JSON.stringify({ hectares: haNum, status, data }),
       });
       if (!res.ok) throw new Error("Falha ao lançar relatório");
       return res.json();
@@ -115,7 +118,7 @@ function ReportDetailPage() {
 
   function copyLancamento(l: Lancamento) {
     if (!report) return;
-    const data = new Date(l.createdAt).toLocaleDateString("pt-BR");
+    const data = new Date(l.data + "T12:00:00").toLocaleDateString("pt-BR");
     const statusLbl = statusMeta[l.status]?.label ?? l.status;
 
     const lines: string[] = [
@@ -142,8 +145,8 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setHectares(""); setStatus("iniciado"); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
-  function closeDialog() { setDialogOpen(false); setHectares(""); setStatus("iniciado"); setFormError(null); setOfflineQueued(false); }
+  function openDialog()  { setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
+  function closeDialog() { setDialogOpen(false); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
 
   async function handleLancar(e: React.FormEvent) {
     e.preventDefault();
@@ -155,7 +158,7 @@ function ReportDetailPage() {
       await enqueue({
         type: "add-lancamento",
         url:  apiUrl(`/reports/${id}/lancamentos`),
-        body: { hectares: haNum, status },
+        body: { hectares: haNum, status, data },
         meta: { reportId: id },
       });
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
@@ -300,7 +303,7 @@ function ReportDetailPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">
-                          {new Date(l.createdAt).toLocaleDateString("pt-BR")}
+                          {new Date(l.data + "T12:00:00").toLocaleDateString("pt-BR")}
                         </span>
                         <Button
                           variant="ghost"
@@ -352,6 +355,19 @@ function ReportDetailPage() {
           </DialogHeader>
 
           <form onSubmit={handleLancar} className="space-y-4">
+            {/* Data */}
+            <div className="space-y-1.5">
+              <Label htmlFor="lancamento-data">Data do serviço *</Label>
+              <Input
+                id="lancamento-data"
+                type="date"
+                value={data}
+                max={todayStr()}
+                onChange={e => setData(e.target.value)}
+                disabled={lancar.isPending}
+              />
+            </div>
+
             {/* Status */}
             <div className="space-y-1.5">
               <Label>Status *</Label>

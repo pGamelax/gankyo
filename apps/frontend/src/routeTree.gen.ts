@@ -17,6 +17,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedReportsIndexRouteImport } from './routes/_authenticated/reports/index'
+import { Route as AuthenticatedProgramacaoIndexRouteImport } from './routes/_authenticated/programacao/index'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedReportsNewRouteImport } from './routes/_authenticated/reports/new'
 import { Route as AuthenticatedReportsIdRouteImport } from './routes/_authenticated/reports/$id'
@@ -63,6 +64,12 @@ const AuthenticatedReportsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedReportsRoute,
+  } as any)
+const AuthenticatedProgramacaoIndexRoute =
+  AuthenticatedProgramacaoIndexRouteImport.update({
+    id: '/programacao/',
+    path: '/programacao/',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/',
@@ -111,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/reports/$id': typeof AuthenticatedReportsIdRoute
   '/reports/new': typeof AuthenticatedReportsNewRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/programacao/': typeof AuthenticatedProgramacaoIndexRoute
   '/reports/': typeof AuthenticatedReportsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -124,6 +132,7 @@ export interface FileRoutesByTo {
   '/reports/$id': typeof AuthenticatedReportsIdRoute
   '/reports/new': typeof AuthenticatedReportsNewRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/programacao': typeof AuthenticatedProgramacaoIndexRoute
   '/reports': typeof AuthenticatedReportsIndexRoute
 }
 export interface FileRoutesById {
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/_authenticated/reports/$id': typeof AuthenticatedReportsIdRoute
   '/_authenticated/reports/new': typeof AuthenticatedReportsNewRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/programacao/': typeof AuthenticatedProgramacaoIndexRoute
   '/_authenticated/reports/': typeof AuthenticatedReportsIndexRoute
 }
 export interface FileRouteTypes {
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/reports/$id'
     | '/reports/new'
     | '/admin/'
+    | '/programacao/'
     | '/reports/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/reports/$id'
     | '/reports/new'
     | '/admin'
+    | '/programacao'
     | '/reports'
   id:
     | '__root__'
@@ -187,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports/$id'
     | '/_authenticated/reports/new'
     | '/_authenticated/admin/'
+    | '/_authenticated/programacao/'
     | '/_authenticated/reports/'
   fileRoutesById: FileRoutesById
 }
@@ -253,6 +266,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reports/'
       preLoaderRoute: typeof AuthenticatedReportsIndexRouteImport
       parentRoute: typeof AuthenticatedReportsRoute
+    }
+    '/_authenticated/programacao/': {
+      id: '/_authenticated/programacao/'
+      path: '/programacao'
+      fullPath: '/programacao/'
+      preLoaderRoute: typeof AuthenticatedProgramacaoIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
@@ -336,6 +356,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedProgramacaoIndexRoute: typeof AuthenticatedProgramacaoIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -343,6 +364,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedProgramacaoIndexRoute: AuthenticatedProgramacaoIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

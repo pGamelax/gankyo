@@ -95,9 +95,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
       if (r.userId !== session!.user.id) { set.status = 403; return { message: "Forbidden" }; }
 
+      const today = new Date().toISOString().slice(0, 10);
       const [created] = await db
         .insert(lancamento)
-        .values({ reportId: params.id, hectares: body.hectares, status: body.status })
+        .values({ reportId: params.id, hectares: body.hectares, status: body.status, data: body.data ?? today })
         .returning();
       return created;
     },
@@ -111,6 +112,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           t.Literal("finalizado"),
           t.Literal("iniciado_finalizado"),
         ]),
+        data: t.Optional(t.String()),
       }),
     }
   )

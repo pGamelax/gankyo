@@ -2,6 +2,7 @@ import {
   pgTable,
   text,
   timestamp,
+  date,
   boolean,
   uuid,
   integer,
@@ -142,6 +143,30 @@ export const lancamento = pgTable("lancamento", {
   hectares: doublePrecision("hectares").notNull(),
   /** iniciado | andamento | finalizado | iniciado_finalizado */
   status: text("status").notNull(),
+  /** Data real do serviço (pode ser retroativa). YYYY-MM-DD */
+  data: date("data").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Regras de programação automática.
+ * Ex: "1º Pré Emergente" deve ser feito 15 dias após "Plantio Manual" atingir status "iniciado".
+ */
+export const regraProgramacao = pgTable("regra_programacao", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Atividade que deve ser realizada (alvo) */
+  activityId: uuid("activity_id")
+    .notNull()
+    .references(() => activity.id, { onDelete: "cascade" }),
+  /** Atividade que dispara a contagem */
+  baseActivityId: uuid("base_activity_id")
+    .notNull()
+    .references(() => activity.id, { onDelete: "cascade" }),
+  /** Status do lancamento que dispara a contagem */
+  baseStatus: text("base_status").notNull(),
+  /** Dias após o disparo para realizar a atividade alvo */
+  diasApos: integer("dias_apos").notNull(),
+  createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -176,6 +201,12 @@ export const reportInsumoRelations = relations(reportInsumo, ({ one }) => ({
 
 export const lancamentoRelations = relations(lancamento, ({ one }) => ({
   report: one(report, { fields: [lancamento.reportId], references: [report.id] }),
+}));
+
+export const regraProgramacaoRelations = relations(regraProgramacao, ({ one }) => ({
+  activity:     one(activity, { fields: [regraProgramacao.activityId],     references: [activity.id], relationName: "targetActivity" }),
+  baseActivity: one(activity, { fields: [regraProgramacao.baseActivityId], references: [activity.id], relationName: "baseActivity"   }),
+  createdBy:    one(user,     { fields: [regraProgramacao.createdBy],      references: [user.id]      }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
