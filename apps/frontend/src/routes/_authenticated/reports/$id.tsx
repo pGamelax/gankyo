@@ -83,6 +83,7 @@ function ReportDetailPage() {
   const [hectares,        setHectares       ] = useState("");
   const [status,          setStatus         ] = useState<StatusValue>("iniciado");
   const [data,            setData           ] = useState(todayStr());
+  const [insumoValues,    setInsumoValues   ] = useState<Record<string, string>>({});
   const [formError,       setFormError      ] = useState<string | null>(null);
   const [offlineQueued,   setOfflineQueued  ] = useState(false);
 
@@ -92,10 +93,25 @@ function ReportDetailPage() {
   const haRestante     = Math.max(0, areaTotal - totalHaLancado);
   const pct            = areaTotal > 0 ? Math.min(100, (totalHaLancado / areaTotal) * 100) : 0;
 
+  function calcInsumos(ha: number): Record<string, string> {
+    if (!report || ha <= 0) return {};
+    return Object.fromEntries(
+      report.insumos.map(ins => [ins.id, (ha * ins.recomendacaoHa).toFixed(2)])
+    );
+  }
+
+  function handleHectaresChange(val: string) {
+    setHectares(val);
+    const ha = parseFloat(val) || 0;
+    setInsumoValues(calcInsumos(ha));
+  }
+
   // ── Quando status muda para finalizado/iniciado_finalizado, preenche ha restante
   useEffect(() => {
     if (status === "finalizado" || status === "iniciado_finalizado") {
-      setHectares(haRestante > 0 ? String(haRestante) : "0");
+      const ha = haRestante > 0 ? haRestante : 0;
+      setHectares(String(ha));
+      setInsumoValues(calcInsumos(ha));
     }
   }, [status, haRestante]);
 
@@ -172,6 +188,7 @@ function ReportDetailPage() {
   function openEdit(l: Lancamento) {
     setEditingLanc(l);
     setHectares(String(l.hectares));
+    setInsumoValues(calcInsumos(l.hectares));
     setStatus(l.status as StatusValue);
     setData(l.data);
     setFormError(null);
@@ -208,8 +225,8 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setEditingLanc(null); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
-  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
+  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
+  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
 
   async function handleLancar(e: React.FormEvent) {
     e.preventDefault();
@@ -489,23 +506,34 @@ function ReportDetailPage() {
                 step="0.01"
                 placeholder="Ex: 5.00"
                 value={hectares}
-                onChange={e => setHectares(e.target.value)}
+                onChange={e => handleHectaresChange(e.target.value)}
                 disabled={lancar.isPending}
               />
             </div>
 
-            {/* Preview insumos calculados */}
-            {report.insumos.length > 0 && haNum > 0 && (
-              <div className="rounded-md border p-3 space-y-2">
+            {/* Insumos editáveis — auto-calculados, mas editáveis */}
+            {report.insumos.length > 0 && (
+              <div className="rounded-md border p-3 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Insumos utilizados ({haNum.toLocaleString("pt-BR")} ha)
+                  Insumos utilizados
+                  {haNum > 0 && <span className="font-normal ml-1">— calculado para {haNum.toLocaleString("pt-BR")} ha</span>}
                 </p>
                 {report.insumos.map(ins => (
-                  <div key={ins.id} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{ins.nome}</span>
-                    <span className="font-semibold">
-                      {(haNum * ins.recomendacaoHa).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
-                    </span>
+                  <div key={ins.id} className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground flex-1 min-w-0 truncate">{ins.nome}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-28 h-8 text-sm text-right"
+                        placeholder="0.00"
+                        value={insumoValues[ins.id] ?? ""}
+                        onChange={e => setInsumoValues(prev => ({ ...prev, [ins.id]: e.target.value }))}
+                        disabled={lancar.isPending || editLanc.isPending}
+                      />
+                      <span className="text-xs text-muted-foreground w-6">un</span>
+                    </div>
                   </div>
                 ))}
               </div>
