@@ -22,6 +22,6 @@ COPY entrypoint.sh ./
 RUN chmod +x ./entrypoint.sh
 
 ENV NODE_ENV=production
-EXPOSE 3001
+EXPOSE 3007
 
 ENTRYPOINT ["./entrypoint.sh"]

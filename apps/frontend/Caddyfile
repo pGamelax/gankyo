@@ -1,4 +1,4 @@
-:80 {
+:3006 {
     root * /srv
 
     # Service Worker nunca deve ser cacheado pelo browser
