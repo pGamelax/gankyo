@@ -1,0 +1,36 @@
+services:
+
+  # ── Backend (Elysia / Bun) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3007:3001"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BACKEND_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORT: 3001
+    networks:
+      - gankyo_net
+
+  # ── Frontend (Vite build → nginx) ────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_API_URL: ${BACKEND_URL}
+    restart: unless-stopped
+    ports:
+      - "3006:80"
+    depends_on:
+      - backend
+    networks:
+      - gankyo_net
+
+networks:
+  gankyo_net:

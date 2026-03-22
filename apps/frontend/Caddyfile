@@ -1,0 +1,22 @@
+:80 {
+    root * /srv
+
+    # Service Worker nunca deve ser cacheado pelo browser
+    @sw path /sw.js
+    header @sw Cache-Control "no-store, no-cache, must-revalidate"
+
+    # Assets com hash: cache imutável de 1 ano
+    @immutable path *.js *.css *.woff2 *.woff *.ttf
+    header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+    # Manifest e ícones: cache curto
+    @manifest path *.webmanifest *.ico *.svg *.png
+    header @manifest Cache-Control "public, max-age=86400"
+
+    encode gzip
+
+    file_server
+
+    # SPA fallback — rotas desconhecidas servem o index.html
+    try_files {path} /index.html
+}

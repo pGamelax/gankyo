@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="40" fill="#2d6a4f"/>
+  <!-- Tronco -->
+  <rect x="88" y="130" width="16" height="32" rx="4" fill="#ffffff" opacity="0.9"/>
+  <!-- Árvore (3 triângulos sobrepostos) -->
+  <polygon points="96,28 132,90 60,90" fill="#ffffff" opacity="0.95"/>
+  <polygon points="96,52 138,108 54,108" fill="#ffffff" opacity="0.85"/>
+  <polygon points="96,74 144,132 48,132" fill="#ffffff" opacity="0.75"/>
+</svg>
