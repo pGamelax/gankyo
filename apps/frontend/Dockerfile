@@ -2,24 +2,22 @@ FROM oven/bun:1-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json bun.lock* bun.lockb* ./
-COPY apps/frontend/package.json ./apps/frontend/
+# Copia só o package.json do frontend (context = apps/frontend/)
+COPY package.json ./
+RUN bun install
 
-RUN bun install --frozen-lockfile --filter frontend
-
-COPY apps/frontend ./apps/frontend
+COPY . .
 
 ARG VITE_API_URL=http://localhost:3001
 ENV VITE_API_URL=$VITE_API_URL
 
-WORKDIR /app/apps/frontend
 RUN bun run build
 
 # ─── Caddy ────────────────────────────────────────────────────────────────────
 FROM caddy:2-alpine
 
-COPY --from=builder /app/apps/frontend/dist /srv
-COPY apps/frontend/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 80
 

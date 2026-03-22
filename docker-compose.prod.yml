@@ -3,8 +3,8 @@ services:
   # ── Backend (Elysia / Bun) ───────────────────────────────────────────────────
   backend:
     build:
-      context: .
-      dockerfile: apps/backend/Dockerfile
+      context: ./apps/backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "3007:3001"
@@ -20,8 +20,8 @@ services:
   # ── Frontend (Vite build → nginx) ────────────────────────────────────────────
   frontend:
     build:
-      context: .
-      dockerfile: apps/frontend/Dockerfile
+      context: ./apps/frontend
+      dockerfile: Dockerfile
       args:
         VITE_API_URL: ${BACKEND_URL}
     restart: unless-stopped
