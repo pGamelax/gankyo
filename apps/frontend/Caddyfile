@@ -1,12 +1,18 @@
 :3006 {
     root * /srv
 
-    # Service Worker nunca deve ser cacheado pelo browser
-    @sw path /sw.js
+    # SW e workbox: NUNCA cachear — browser precisa verificar atualizações sempre
+    # No iOS isso é crítico: sw.js cacheado com immutable quebra o PWA offline
+    @sw {
+        path_regexp ^/(sw\.js|workbox-[^/]+\.js)$
+    }
     header @sw Cache-Control "no-store, no-cache, must-revalidate"
 
-    # Assets com hash: cache imutável de 1 ano
-    @immutable path *.js *.css *.woff2 *.woff *.ttf
+    # Assets com hash no nome: cache imutável de 1 ano (exclui SW)
+    @immutable {
+        path *.js *.css *.woff2 *.woff *.ttf
+        not path_regexp ^/(sw\.js|workbox-[^/]+\.js)$
+    }
     header @immutable Cache-Control "public, max-age=31536000, immutable"
 
     # Manifest e ícones: cache curto

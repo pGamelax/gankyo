@@ -52,20 +52,30 @@ export default defineConfig(({ mode }) => {
           // iOS: fallback para SPA — nunca interceptar rotas de API
           navigateFallback: "/index.html",
           navigateFallbackDenylist: [/^\/api/],
-          // Cache de chamadas GET à API — NetworkFirst com timeout
-          // Se offline, serve do cache (relatórios, fazendas, etc.)
           runtimeCaching: [
+            // ── Navegação (HTML) ─────────────────────────────────────────────
+            // Crítico para iOS: cachear o próprio index.html com NetworkFirst
+            // garante que o app abre offline mesmo em rotas como /reports/123
+            {
+              urlPattern: ({ request }) => request.mode === "navigate",
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "gankyo-pages-cache",
+                networkTimeoutSeconds: 4,
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            // ── API GET ──────────────────────────────────────────────────────
+            // NetworkFirst: tenta rede, cai no cache se offline
             {
               urlPattern: apiPattern,
               handler: "NetworkFirst",
               options: {
                 cacheName: "gankyo-api-cache",
-                // iOS: timeout curto para não travar a UI
                 networkTimeoutSeconds: 4,
                 cacheableResponse: { statuses: [200] },
                 expiration: {
                   maxEntries: 200,
-                  // 7 dias
                   maxAgeSeconds: 7 * 24 * 60 * 60,
                 },
               },
