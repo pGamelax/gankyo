@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { FileText, Plus, Tractor, Layers, Activity, ChevronRight, Copy, Check } from "lucide-react";
+import { FileText, Plus, Tractor, Layers, Activity, ChevronRight, Copy, Check, WifiOff } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ type ReportSummary = {
   activity: { id: string; name: string };
   insumos: { id: string; nome: string; recomendacaoHa: number }[];
   lancamentos: { id: string; hectares: number; status: string }[];
+  _pending?: boolean;
 };
 
 type Fazenda = { id: string; name: string };
@@ -148,46 +149,66 @@ function ReportsIndexPage() {
 
                 return (
                   <div key={r.id} className="flex items-center gap-2 py-4 -mx-2 px-2">
-                    <Link
-                      to="/reports/$id"
-                      params={{ id: r.id }}
-                      className="flex items-center justify-between gap-4 flex-1 min-w-0 hover:bg-muted/40 rounded-md transition-colors px-2 -mx-2"
-                    >
-                      <div className="min-w-0 space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold">{r.activity.name}</span>
-                          {status && <Badge variant={status.variant} className="text-xs">{status.label}</Badge>}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                          <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
-                          <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
-                          <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{totalHa.toLocaleString("pt-BR")} / {r.talhao.area.toLocaleString("pt-BR")} ha</span>
-                        </div>
-                        <div className="w-full max-w-xs h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
+                    {r._pending ? (
+                      // Pending (offline) entries — not navigable yet
+                      <div className="flex items-center justify-between gap-4 flex-1 min-w-0 px-2 -mx-2 opacity-70">
+                        <div className="min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold">{r.activity.name}</span>
+                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-400 flex items-center gap-1">
+                              <WifiOff className="h-3 w-3" />Aguardando sincronização
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
+                            <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
+                          </div>
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </Link>
+                    ) : (
+                      <Link
+                        to="/reports/$id"
+                        params={{ id: r.id }}
+                        className="flex items-center justify-between gap-4 flex-1 min-w-0 hover:bg-muted/40 rounded-md transition-colors px-2 -mx-2"
+                      >
+                        <div className="min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold">{r.activity.name}</span>
+                            {status && <Badge variant={status.variant} className="text-xs">{status.label}</Badge>}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
+                            <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
+                            <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{totalHa.toLocaleString("pt-BR")} / {r.talhao.area.toLocaleString("pt-BR")} ha</span>
+                          </div>
+                          <div className="w-full max-w-xs h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </Link>
+                    )}
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => {
-                        copyReport(r);
-                        setCopiedId(r.id);
-                        setTimeout(() => setCopiedId(null), 2500);
-                      }}
-                    >
-                      {copiedId === r.id
-                        ? <Check className="h-3.5 w-3.5 text-primary" />
-                        : <Copy className="h-3.5 w-3.5" />
-                      }
-                    </Button>
+                    {!r._pending && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          copyReport(r);
+                          setCopiedId(r.id);
+                          setTimeout(() => setCopiedId(null), 2500);
+                        }}
+                      >
+                        {copiedId === r.id
+                          ? <Check className="h-3.5 w-3.5 text-primary" />
+                          : <Copy className="h-3.5 w-3.5" />
+                        }
+                      </Button>
+                    )}
                   </div>
                 );
               })}

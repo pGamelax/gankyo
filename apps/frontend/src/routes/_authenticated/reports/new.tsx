@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,8 @@ const fetchActivities = () => fetch(apiUrl("/activities"), { credentials: "inclu
 const fetchReports    = () => fetch(apiUrl("/reports"),    { credentials: "include" }).then(r => r.json()) as Promise<ReportExistente[]>;
 
 function NewReportPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const qc = useQueryClient();
 
   const { data: fazendas        = [] } = useQuery({ queryKey: ["fazendas"],   queryFn: fetchFazendas   });
   const { data: allTalhoes      = [] } = useQuery({ queryKey: ["talhoes"],    queryFn: fetchTalhoes    });
@@ -97,24 +98,42 @@ function NewReportPage() {
     const invalidInsumo = insumos.find(ins => !ins.nome.trim() || isNaN(parseFloat(ins.recomendacaoHa)));
     if (invalidInsumo) { setFormError("Preencha nome e recomendação de todos os insumos."); return; }
 
-    // Se offline: salva na fila IndexedDB e exibe feedback
+    // Se offline: salva na fila + insere item optimista no cache
     if (!navigator.onLine) {
+      const tempId  = crypto.randomUUID();
+      const parsedInsumos = insumos.map(ins => ({
+        nome: ins.nome.trim(),
+        recomendacaoHa: parseFloat(ins.recomendacaoHa),
+      }));
+      const selectedFazenda  = fazendas.find(f => f.id === fazendaId)!;
+      const selectedTalhao   = allTalhoes.find(t => t.id === talhaoId)!;
+      const selectedActivity = activities.find(a => a.id === activityId)!;
+
       await enqueue({
-        type: "create-report",
-        url:  apiUrl("/reports"),
-        body: {
-          fazendaId,
-          talhaoId,
-          activityId,
-          insumos: insumos.map(ins => ({
-            nome: ins.nome.trim(),
-            recomendacaoHa: parseFloat(ins.recomendacaoHa),
-          })),
-        },
+        type:   "create-report",
+        method: "POST",
+        url:    apiUrl("/reports"),
+        body:   { fazendaId, talhaoId, activityId, insumos: parsedInsumos },
+        meta:   { tempId },
       });
-      // Atualiza o contador de pendentes no layout
+
+      // Optimistic insert: aparece na lista imediatamente
+      qc.setQueryData(["reports"], (old: unknown[] | undefined) => [
+        {
+          id:         tempId,
+          _pending:   true,
+          createdAt:  new Date().toISOString(),
+          fazenda:    { id: selectedFazenda.id,  name: selectedFazenda.name   },
+          talhao:     { id: selectedTalhao.id,   codigo: selectedTalhao.codigo, area: selectedTalhao.area },
+          activity:   { id: selectedActivity.id, name: selectedActivity.name  },
+          insumos:    parsedInsumos.map((ins, i) => ({ id: `tmp-ins-${i}`, ...ins })),
+          lancamentos: [],
+        },
+        ...(old ?? []),
+      ]);
+
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
-      setOfflineQueued(true);
+      navigate({ to: "/reports" });
       return;
     }
 

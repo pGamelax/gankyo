@@ -8,7 +8,7 @@ import {
   integer,
   doublePrecision,
 } from "drizzle-orm/pg-core";
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 
 // ─── Better Auth tables ───────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ export const lancamento = pgTable("lancamento", {
   /** iniciado | andamento | finalizado | iniciado_finalizado */
   status: text("status").notNull(),
   /** Data real do serviço (pode ser retroativa). YYYY-MM-DD */
-  data: date("data").notNull().default(sql`CURRENT_DATE`),
+  data: date("data").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -11,6 +11,7 @@ import AppSidebar from "@/components/layout/app-sidebar";
 import { OfflineBanner, SyncedBanner } from "@/components/offline-banner";
 import { useOnline } from "@/hooks/use-online";
 import { flushQueue, getQueue } from "@/lib/offline-queue";
+import { apiUrl } from "@/lib/api";
 
 const SESSION_CACHE_KEY = "gankyo:session";
 
@@ -25,15 +26,12 @@ export const Route = createFileRoute("/_authenticated")({
       return { session };
     }
 
-    // Sem sessão — verifica se está offline e tem sessão cacheada
-    if (!navigator.onLine) {
-      try {
-        const cached = localStorage.getItem(SESSION_CACHE_KEY);
-        if (cached) return { session: JSON.parse(cached) };
-      } catch {}
-    }
+    // Sem sessão — tenta cache local (offline ou PWA cold start)
+    try {
+      const cached = localStorage.getItem(SESSION_CACHE_KEY);
+      if (cached) return { session: JSON.parse(cached) };
+    } catch {}
 
-    // Online sem sessão válida → login
     throw redirect({ to: "/login" });
   },
   component: AuthenticatedLayout,
@@ -66,8 +64,20 @@ function AuthenticatedLayout() {
       if (count === 0 || cancelled) return;
 
       setIsSyncing(true);
-      const synced = await flushQueue((action) => {
-        // Invalida queries afetadas para atualizar a UI após sync
+      const synced = await flushQueue((action, serverData) => {
+        // Remove optimistic (temp) entry and let invalidation fetch the real data
+        if (action.type === "create-report" && action.meta?.tempId) {
+          const tempId = action.meta.tempId;
+          const realId = (serverData as { id?: string })?.id;
+          // Swap tempId → realId in the reports list cache
+          qc.setQueryData(["reports"], (old: unknown[] | undefined) =>
+            (old ?? []).map((r: unknown) => {
+              const report = r as { id: string; _pending?: boolean };
+              if (report.id !== tempId) return r;
+              return { ...report, id: realId ?? report.id, _pending: false };
+            })
+          );
+        }
         qc.invalidateQueries({ queryKey: ["reports"] });
         if (action.meta?.reportId) {
           qc.invalidateQueries({ queryKey: ["reports", action.meta.reportId] });
@@ -92,6 +102,60 @@ function AuthenticatedLayout() {
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__gankyoRefreshPendingCount = refreshCount;
   }, [refreshCount]);
+
+  // Ao abrir o app online: sincroniza todos os relatórios dos últimos 60 dias
+  useEffect(() => {
+    if (!isOnline) return;
+
+    let cancelled = false;
+
+    async function prefetchRecent() {
+      const get = (path: string) =>
+        fetch(apiUrl(path), { credentials: "include" }).then((r) => r.json());
+
+      // 1. Dados base — sempre atualizados ao abrir
+      type ReportItem = { id: string; createdAt: string; _pending?: boolean };
+      let reports: ReportItem[] = [];
+      try {
+        [reports] = await Promise.all([
+          qc.fetchQuery<ReportItem[]>({ queryKey: ["reports"],    queryFn: () => get("/reports"),    staleTime: 0 }),
+          qc.fetchQuery({              queryKey: ["fazendas"],    queryFn: () => get("/fazendas"),   staleTime: 0 }),
+          qc.fetchQuery({              queryKey: ["talhoes"],     queryFn: () => get("/talhoes"),    staleTime: 0 }),
+          qc.fetchQuery({              queryKey: ["activities"],  queryFn: () => get("/activities"), staleTime: 0 }),
+          qc.fetchQuery({              queryKey: ["me", "preferences"], queryFn: () => get("/me/preferences"), staleTime: 0 }),
+        ]);
+      } catch {
+        return; // offline ou erro — ignora silenciosamente
+      }
+
+      if (cancelled) return;
+
+      // 2. Detalhes de relatórios dos últimos 60 dias (exclui pendentes offline)
+      const since = Date.now() - 60 * 24 * 60 * 60 * 1000;
+      const recent = reports.filter(
+        (r) => !r._pending && new Date(r.createdAt).getTime() >= since
+      );
+
+      // 3. Pré-carrega em lotes de 5 para não sobrecarregar o servidor
+      const BATCH = 5;
+      const DETAIL_STALE = 1000 * 60 * 10; // pula se buscado há menos de 10 min
+      for (let i = 0; i < recent.length; i += BATCH) {
+        if (cancelled) break;
+        await Promise.all(
+          recent.slice(i, i + BATCH).map((r) =>
+            qc.prefetchQuery({
+              queryKey: ["reports", r.id],
+              queryFn:  () => get(`/reports/${r.id}`),
+              staleTime: DETAIL_STALE,
+            })
+          )
+        );
+      }
+    }
+
+    prefetchRecent();
+    return () => { cancelled = true; };
+  }, [isOnline, qc]);
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">

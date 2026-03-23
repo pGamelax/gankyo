@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/reports/$id")({
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Insumo     = { id: string; nome: string; recomendacaoHa: number };
-type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string };
+type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string; _pending?: boolean };
 type ReportDetail = {
   id: string;
   userId: string;
@@ -85,7 +85,6 @@ function ReportDetailPage() {
   const [data,            setData           ] = useState(todayStr());
   const [insumoValues,    setInsumoValues   ] = useState<Record<string, string>>({});
   const [formError,       setFormError      ] = useState<string | null>(null);
-  const [offlineQueued,   setOfflineQueued  ] = useState(false);
 
   // ── Cálculos derivados ─────────────────────────────────────────────────────
   const totalHaLancado = report?.lancamentos.reduce((s, l) => s + l.hectares, 0) ?? 0;
@@ -192,7 +191,6 @@ function ReportDetailPage() {
     setStatus(l.status as StatusValue);
     setData(l.data);
     setFormError(null);
-    setOfflineQueued(false);
     setDialogOpen(true);
   }
 
@@ -225,24 +223,37 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); setDialogOpen(true); }
-  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setOfflineQueued(false); }
+  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setDialogOpen(true); }
+  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); }
 
   async function handleLancar(e: React.FormEvent) {
     e.preventDefault();
-    setOfflineQueued(false);
     if (!hectares || haNum <= 0) { setFormError("Informe a quantidade de hectares."); return; }
 
-    // Se offline: enfileira e fecha o dialog com feedback
+    // Se offline: enfileira + insere lancamento optimista no cache
     if (!navigator.onLine) {
+      const tempLancId = crypto.randomUUID();
       await enqueue({
-        type: "add-lancamento",
-        url:  apiUrl(`/reports/${id}/lancamentos`),
-        body: { hectares: haNum, status, data },
-        meta: { reportId: id },
+        type:   "add-lancamento",
+        method: "POST",
+        url:    apiUrl(`/reports/${id}/lancamentos`),
+        body:   { hectares: haNum, status, data },
+        meta:   { reportId: id, tempLancId },
+      });
+      // Optimistic insert no detalhe do relatório
+      qc.setQueryData(["reports", id], (old: ReportDetail | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          lancamentos: [
+            ...old.lancamentos,
+            { id: tempLancId, hectares: haNum, status, data, createdAt: new Date().toISOString(), _pending: true },
+          ],
+        };
       });
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
       setOfflineQueued(true);
+      closeDialog();
       return;
     }
 
@@ -392,6 +403,11 @@ function ReportDetailPage() {
                             <Icon className="h-3 w-3" />{m.label}
                           </Badge>
                         )}
+                        {l._pending && (
+                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-400 flex items-center gap-1">
+                            <WifiOff className="h-3 w-3" />Pendente
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground mr-1">
@@ -407,7 +423,7 @@ function ReportDetailPage() {
                             : <Copy className="h-3.5 w-3.5" />
                           }
                         </Button>
-                        {canEdit && (
+                        {canEdit && !l._pending && (
                           <>
                             <Button
                               variant="ghost" size="icon"
@@ -543,25 +559,14 @@ function ReportDetailPage() {
               <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{formError}</p>
             )}
 
-            {offlineQueued && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5">
-                <WifiOff className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  <strong>Salvo offline.</strong> Será enviado quando você voltar a ficar online.
-                </p>
-              </div>
-            )}
-
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={closeDialog} disabled={lancar.isPending}>
-                {offlineQueued ? "Fechar" : "Cancelar"}
+                Cancelar
               </Button>
-              {!offlineQueued && (
-                <Button type="submit" disabled={lancar.isPending}>
-                  {lancar.isPending && <Loader2 className="animate-spin" />}
-                  Lançar
-                </Button>
-              )}
+              <Button type="submit" disabled={lancar.isPending}>
+                {lancar.isPending && <Loader2 className="animate-spin" />}
+                Lançar
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

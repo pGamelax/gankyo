@@ -21,14 +21,19 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export type OfflineActionType = "create-report" | "add-lancamento";
+export type OfflineActionType =
+  | "create-report"
+  | "add-lancamento"
+  | "edit-lancamento"
+  | "delete-lancamento";
 
 export type OfflineAction = {
   id:        string;
   type:      OfflineActionType;
+  method:    "POST" | "PATCH" | "DELETE";
   url:       string;
-  body:      object;
-  /** Dados extras para uso após sincronização (ex: reportId para invalidar queries) */
+  body?:     object;
+  /** Extra data used post-sync (e.g. reportId to invalidate, tempId mapping) */
   meta?:     Record<string, string>;
   createdAt: number;
 };
@@ -70,34 +75,53 @@ export async function dequeue(id: string): Promise<void> {
 }
 
 /**
- * Tenta enviar todas as ações pendentes ao servidor.
- * Chame isso no evento `online` ou ao montar o app quando online.
+ * Tenta enviar todas as ações pendentes ao servidor em ordem.
+ * Resolve IDs temporários: se um create-report retornar um ID real,
+ * as ações seguintes que referenciam o tempId terão a URL corrigida.
  *
- * @param onSynced Callback chamado para cada ação sincronizada com sucesso.
+ * @param onSynced Callback para cada ação sincronizada com sucesso.
  * @returns Número de ações sincronizadas.
  */
 export async function flushQueue(
-  onSynced?: (action: OfflineAction) => void
+  onSynced?: (action: OfflineAction, serverData?: unknown) => void
 ): Promise<number> {
   const queue = await getQueue();
   let synced = 0;
+  // tempId → realId mapping built as create-reports are resolved
+  const idMap: Record<string, string> = {};
 
   for (const action of queue) {
     try {
-      const res = await fetch(action.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      // Replace any temp IDs in the URL with real server IDs
+      let url = action.url;
+      for (const [tempId, realId] of Object.entries(idMap)) {
+        url = url.replaceAll(tempId, realId);
+      }
+
+      const isDelete = action.method === "DELETE";
+      const res = await fetch(url, {
+        method:      action.method,
+        headers:     isDelete ? undefined : { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(action.body),
+        body:        action.body ? JSON.stringify(action.body) : undefined,
       });
 
       if (res.ok) {
+        let data: unknown;
+        try { data = await res.json(); } catch {}
+
+        // Store tempId → realId so downstream actions can resolve their URLs
+        if (action.type === "create-report" && action.meta?.tempId) {
+          const realId = (data as { id?: string })?.id;
+          if (realId) idMap[action.meta.tempId] = realId;
+        }
+
         await dequeue(action.id);
-        onSynced?.(action);
+        onSynced?.(action, data);
         synced++;
       }
     } catch {
-      // Ainda offline ou erro de rede — mantém na fila
+      // Still offline or network error — keep in queue
     }
   }
 

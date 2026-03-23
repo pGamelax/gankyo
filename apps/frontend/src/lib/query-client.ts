@@ -1,10 +1,34 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, dehydrate, hydrate } from "@tanstack/react-query";
+
+const CACHE_KEY = "gankyo:qcache";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60, // 1 minute
-      retry: 1,
+      staleTime:   1000 * 60 * 5,           // 5 min — fresh window
+      gcTime:      Infinity,                 // never evict — data persists indefinitely
+      networkMode: "offlineFirst",           // serve cache even when offline
+      retry: (count) => navigator.onLine && count < 1,
+    },
+    mutations: {
+      networkMode: "offlineFirst",
     },
   },
+});
+
+// ── Rehydrate on startup ──────────────────────────────────────────────────────
+try {
+  const raw = localStorage.getItem(CACHE_KEY);
+  if (raw) hydrate(queryClient, JSON.parse(raw));
+} catch {}
+
+// ── Persist on changes (debounced 500 ms) ────────────────────────────────────
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+queryClient.getQueryCache().subscribe(() => {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(dehydrate(queryClient)));
+    } catch {}
+  }, 500);
 });
