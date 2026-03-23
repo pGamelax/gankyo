@@ -38,7 +38,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         talhao: true,
         activity: true,
         insumos: true,
-        lancamentos: { orderBy: (l, { asc }) => [asc(l.createdAt)] },
+        lancamentos: { orderBy: (l, { asc }) => [asc(l.data), asc(l.createdAt)] },
       },
     });
     if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }

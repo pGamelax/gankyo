@@ -252,7 +252,6 @@ function ReportDetailPage() {
         };
       });
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
-      setOfflineQueued(true);
       closeDialog();
       return;
     }
