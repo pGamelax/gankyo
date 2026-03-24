@@ -5,9 +5,10 @@ const CACHE_KEY = "gankyo:qcache";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime:   1000 * 60 * 5,           // 5 min — fresh window
-      gcTime:      Infinity,                 // never evict — data persists indefinitely
-      networkMode: "offlineFirst",           // serve cache even when offline
+      staleTime:            0,               // sempre obsoleto → refetch ao focar o app
+      gcTime:               Infinity,        // nunca remove do cache → disponível offline
+      networkMode:          "offlineFirst",  // serve cache mesmo offline
+      refetchOnWindowFocus: true,            // refetch quando PWA volta ao foreground
       retry: (count) => navigator.onLine && count < 1,
     },
     mutations: {

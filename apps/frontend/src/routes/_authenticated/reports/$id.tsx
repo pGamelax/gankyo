@@ -86,6 +86,13 @@ function ReportDetailPage() {
   const [insumoValues,    setInsumoValues   ] = useState<Record<string, string>>({});
   const [formError,       setFormError      ] = useState<string | null>(null);
 
+  // ── Regras de negócio ─────────────────────────────────────────────────────
+  const isClosed  = !!report?.lancamentos.some(l => l.status === "finalizado" || l.status === "iniciado_finalizado");
+  const hasIniciado = !!report?.lancamentos.some(l => l.status === "iniciado");
+  const availableStatuses = STATUS_OPTIONS.filter(opt =>
+    !(opt.value === "iniciado" && hasIniciado)
+  );
+
   // ── Cálculos derivados ─────────────────────────────────────────────────────
   const totalHaLancado = report?.lancamentos.reduce((s, l) => s + l.hectares, 0) ?? 0;
   const areaTotal      = report?.talhao.area ?? 0;
@@ -223,7 +230,7 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); setDialogOpen(true); }
+  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus(hasIniciado ? "andamento" : "iniciado"); setData(todayStr()); setFormError(null); setDialogOpen(true); }
   function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); }
 
   async function handleLancar(e: React.FormEvent) {
@@ -380,8 +387,8 @@ function ReportDetailPage() {
             <CardTitle className="text-base">Lançamentos</CardTitle>
             <CardDescription>{report.lancamentos.length} lançamento(s) registrado(s)</CardDescription>
           </div>
-          <Button onClick={openDialog} className="w-full sm:w-auto">
-            <Plus /> Lançar Relatório
+          <Button onClick={openDialog} className="w-full sm:w-auto" disabled={isClosed}>
+            <Plus /> {isClosed ? "Atividade Finalizada" : "Lançar Relatório"}
           </Button>
         </CardHeader>
         <CardContent>
@@ -499,7 +506,7 @@ function ReportDetailPage() {
               <Select value={status} onValueChange={(v) => setStatus(v as StatusValue)} disabled={lancar.isPending}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map(opt => (
+                  {availableStatuses.map(opt => (
                     <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>

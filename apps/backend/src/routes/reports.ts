@@ -97,6 +97,21 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
       if (r.userId !== session!.user.id) { set.status = 403; return { message: "Forbidden" }; }
 
+      // Regra 1: atividade finalizada não aceita novos lançamentos
+      const isClosed = r.lancamentos.some(
+        l => l.status === "finalizado" || l.status === "iniciado_finalizado"
+      );
+      if (isClosed) {
+        set.status = 422;
+        return { message: "Atividade já finalizada. Não é possível adicionar novos lançamentos." };
+      }
+
+      // Regra 2: só pode haver um lançamento com status "iniciado"
+      if (body.status === "iniciado" && r.lancamentos.some(l => l.status === "iniciado")) {
+        set.status = 422;
+        return { message: "Já existe um lançamento com status 'Iniciado'." };
+      }
+
       const today = new Date().toISOString().slice(0, 10);
       const [created] = await db
         .insert(lancamento)

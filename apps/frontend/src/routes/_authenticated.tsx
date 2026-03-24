@@ -118,11 +118,11 @@ function AuthenticatedLayout() {
       let reports: ReportItem[] = [];
       try {
         [reports] = await Promise.all([
-          qc.fetchQuery<ReportItem[]>({ queryKey: ["reports"],    queryFn: () => get("/reports"),    staleTime: 0 }),
-          qc.fetchQuery({              queryKey: ["fazendas"],    queryFn: () => get("/fazendas"),   staleTime: 0 }),
-          qc.fetchQuery({              queryKey: ["talhoes"],     queryFn: () => get("/talhoes"),    staleTime: 0 }),
-          qc.fetchQuery({              queryKey: ["activities"],  queryFn: () => get("/activities"), staleTime: 0 }),
-          qc.fetchQuery({              queryKey: ["me", "preferences"], queryFn: () => get("/me/preferences"), staleTime: 0 }),
+          qc.fetchQuery<ReportItem[]>({ queryKey: ["reports"],          queryFn: () => get("/reports")         }),
+          qc.fetchQuery({              queryKey: ["fazendas"],          queryFn: () => get("/fazendas")        }),
+          qc.fetchQuery({              queryKey: ["talhoes"],           queryFn: () => get("/talhoes")         }),
+          qc.fetchQuery({              queryKey: ["activities"],        queryFn: () => get("/activities")      }),
+          qc.fetchQuery({              queryKey: ["me", "preferences"], queryFn: () => get("/me/preferences") }),
         ]);
       } catch {
         return; // offline ou erro — ignora silenciosamente
@@ -136,9 +136,8 @@ function AuthenticatedLayout() {
         (r) => !r._pending && new Date(r.createdAt).getTime() >= since
       );
 
-      // 3. Pré-carrega em lotes de 5 para não sobrecarregar o servidor
+      // 3. Pré-carrega detalhes em lotes de 5
       const BATCH = 5;
-      const DETAIL_STALE = 1000 * 60 * 10; // pula se buscado há menos de 10 min
       for (let i = 0; i < recent.length; i += BATCH) {
         if (cancelled) break;
         await Promise.all(
@@ -146,7 +145,6 @@ function AuthenticatedLayout() {
             qc.prefetchQuery({
               queryKey: ["reports", r.id],
               queryFn:  () => get(`/reports/${r.id}`),
-              staleTime: DETAIL_STALE,
             })
           )
         );
