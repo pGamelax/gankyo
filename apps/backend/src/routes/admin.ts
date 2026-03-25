@@ -24,7 +24,7 @@ export const adminRouter = new Elysia({ prefix: "/admin" })
       .select({
         id: user.id,
         name: user.name,
-        email: user.email,
+        username: user.username,
         role: user.role,
         banned: user.banned,
         banReason: user.banReason,
@@ -62,4 +62,51 @@ export const adminRouter = new Elysia({ prefix: "/admin" })
       .where(eq(user.id, params.id))
       .returning({ id: user.id, banned: user.banned });
     return updated;
+  })
+  .delete("/users/:id", async ({ params, set }) => {
+    const [deleted] = await db
+      .delete(user)
+      .where(eq(user.id, params.id))
+      .returning({ id: user.id });
+    if (!deleted) {
+      set.status = 404;
+      return { message: "Usuário não encontrado" };
+    }
+    return { id: deleted.id };
+  })
+  .post("/users", async ({ body, set }) => {
+    const { name, username, password, role } = body as {
+      name: string;
+      username: string;
+      password: string;
+      role?: string;
+    };
+
+    if (!name?.trim() || !username?.trim() || !password) {
+      set.status = 400;
+      return { message: "Nome, usuário e senha são obrigatórios" };
+    }
+    if (role && !["user", "admin"].includes(role)) {
+      set.status = 400;
+      return { message: "Role inválida" };
+    }
+
+    const slug = username.trim().toLowerCase();
+    const email = `${slug}@gankyo.local`;
+
+    try {
+      const result = await auth.api.createUser({
+        body: { name: name.trim(), email, password, role: role ?? "user" },
+      });
+
+      // better-auth ignora o campo username em createUser — setar manualmente
+      await db.update(user)
+        .set({ username: slug })
+        .where(eq(user.id, result.user.id));
+
+      return { ...result.user, username: slug };
+    } catch (e: unknown) {
+      set.status = 400;
+      return { message: e instanceof Error ? e.message : "Erro ao criar usuário" };
+    }
   });

@@ -188,7 +188,7 @@ function ProgramacaoPage() {
       ) : (
         <div className="space-y-4">
           {/* Tabs por regra */}
-          <div className="flex gap-1 border-b flex-wrap">
+          <div className="flex gap-1 border-b overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
             {tabs.map(t => {
               const isActive = (activeTab ?? tabs[0].regra.id) === t.regra.id;
               const pendCount = t.items.filter(i => !i.jaConcluida).length;

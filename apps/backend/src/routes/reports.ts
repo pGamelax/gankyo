@@ -3,6 +3,7 @@ import { db } from "../db";
 import { report, reportInsumo, lancamento, talhao } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "../auth";
+import { broadcast } from "../events";
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
   .derive(async ({ request }) => {
@@ -16,9 +17,8 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     }
   })
   // Listar ordens do usuário
-  .get("/", async ({ session }) => {
+  .get("/", async () => {
     return db.query.report.findMany({
-      where: eq(report.userId, session!.user.id),
       with: {
         fazenda: { columns: { id: true, name: true } },
         talhao: { columns: { id: true, codigo: true, area: true } },
@@ -42,9 +42,6 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       },
     });
     if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
-    const isOwner = r.userId === session!.user.id;
-    const isAdmin = session!.user.role === "admin";
-    if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
     return r;
   }, { params: t.Object({ id: t.String() }) })
   // Criar ordem de serviço (Iniciar Atividade)
@@ -70,6 +67,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           }))
         );
       }
+      broadcast(["reports", "dashboard"]);
       return created;
     },
     {
@@ -117,6 +115,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         .insert(lancamento)
         .values({ reportId: params.id, hectares: body.hectares, status: body.status, data: body.data ?? today })
         .returning();
+      broadcast(["reports", `reports/${params.id}`, "dashboard"]);
       return created;
     },
     {
@@ -153,6 +152,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         })
         .where(eq(lancamento.id, params.lancId))
         .returning();
+      broadcast(["reports", `reports/${params.id}`, "dashboard"]);
       return updated;
     },
     {
@@ -179,6 +179,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       const isAdmin = session!.user.role === "admin";
       if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
       await db.delete(lancamento).where(eq(lancamento.id, params.lancId));
+      broadcast(["reports", `reports/${params.id}`, "dashboard"]);
       return { success: true };
     },
     { params: t.Object({ id: t.String(), lancId: t.String() }) }
@@ -193,6 +194,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       const isAdmin = session!.user.role === "admin";
       if (!isOwner && !isAdmin) { set.status = 403; return { message: "Forbidden" }; }
       await db.delete(report).where(eq(report.id, params.id));
+      broadcast(["reports", "dashboard"]);
       return { success: true };
     },
     { params: t.Object({ id: t.String() }) }

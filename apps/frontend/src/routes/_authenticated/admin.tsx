@@ -41,7 +41,7 @@ function AdminLayout() {
       </div>
 
       {/* Tab nav */}
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
         {adminTabs.map(({ label, to, icon: Icon, exact }) => {
           const isActive = exact
             ? location.pathname === to

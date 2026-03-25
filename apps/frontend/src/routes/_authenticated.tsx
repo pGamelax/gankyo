@@ -103,6 +103,54 @@ function AuthenticatedLayout() {
     (window as unknown as Record<string, unknown>).__gankyoRefreshPendingCount = refreshCount;
   }, [refreshCount]);
 
+  // SSE — sincronização real-time quando online
+  useEffect(() => {
+    if (!isOnline) return;
+
+    let es: EventSource | null = null;
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 1000;
+    let cancelled = false;
+
+    function connect() {
+      if (cancelled) return;
+
+      es = new EventSource(apiUrl("/events"), { withCredentials: true });
+
+      es.onmessage = (e) => {
+        retryDelay = 1000; // reset backoff on successful message
+        try {
+          const { keys, ping } = JSON.parse(e.data) as { keys?: string[]; ping?: boolean };
+          if (ping || !keys) return;
+          // Não refaz fetch enquanto há itens pendentes offline — evita apagar dados optimistas
+          if (pendingCount > 0) return;
+          for (const key of keys) {
+            qc.refetchQueries({ queryKey: key.split("/"), type: "active" });
+          }
+        } catch { /* ignore */ }
+      };
+
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (cancelled) return;
+        // Reconecta com backoff exponencial (máx 30s)
+        retryTimeout = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, 30_000);
+          connect();
+        }, retryDelay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeout) clearTimeout(retryTimeout);
+      es?.close();
+    };
+  }, [isOnline, qc]);
+
   // Ao abrir o app online: sincroniza todos os relatórios dos últimos 60 dias
   useEffect(() => {
     if (!isOnline) return;
@@ -111,7 +159,10 @@ function AuthenticatedLayout() {
 
     async function prefetchRecent() {
       const get = (path: string) =>
-        fetch(apiUrl(path), { credentials: "include" }).then((r) => r.json());
+        fetch(apiUrl(path), { credentials: "include" }).then((r) => {
+          if (!r.ok) throw new Error(`${r.status}`);
+          return r.json();
+        });
 
       // 1. Dados base — sempre atualizados ao abrir
       type ReportItem = { id: string; createdAt: string; _pending?: boolean };
@@ -201,10 +252,14 @@ function AuthenticatedLayout() {
         </header>
 
         <main
-          className="flex-1 overflow-y-auto p-4 md:p-6"
-          style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+          className="flex-1 overflow-y-auto pt-4 md:pt-6"
+          style={{
+            paddingLeft: "max(1rem, env(safe-area-inset-left))",
+            paddingRight: "max(1rem, env(safe-area-inset-right))",
+            paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
+          }}
         >
-          <div className="max-w-5xl mx-auto w-full">
+          <div className="max-w-5xl mx-auto w-full min-w-0">
             <Outlet />
           </div>
         </main>

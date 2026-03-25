@@ -12,7 +12,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +23,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await signIn.email({ email, password });
+      const { error } = await signIn.username({ username, password });
       if (error) throw new Error(error.message ?? "Erro ao entrar");
       navigate({ to: "/dashboard" });
     } catch (err) {
@@ -156,16 +156,18 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="username">Usuário</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="voce@exemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="pedro.gamela"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={loading}
                 className="h-11"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
 

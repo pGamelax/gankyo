@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ArrowLeft, Tractor, Layers, Activity, Plus,
   Loader2, Droplets, CheckCircle2, Clock, AlertCircle, Copy, Check, WifiOff,
@@ -31,6 +32,7 @@ type Lancamento = { id: string; hectares: number; status: string; data: string; 
 type ReportDetail = {
   id: string;
   userId: string;
+  _pending?: boolean;
   createdAt: string;
   fazenda:  { id: string; name: string };
   talhao:   { id: string; codigo: string; area: number };
@@ -78,6 +80,8 @@ function ReportDetailPage() {
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
   const [dialogOpen,      setDialogOpen     ] = useState(false);
+  const [deleteReportOpen, setDeleteReportOpen] = useState(false);
+  const [deleteLancId,    setDeleteLancId   ] = useState<string | null>(null);
   const [editingLanc,     setEditingLanc    ] = useState<Lancamento | null>(null);
   const [copiedId,        setCopiedId       ] = useState<string | null>(null);
   const [hectares,        setHectares       ] = useState("");
@@ -269,7 +273,7 @@ function ReportDetailPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
-  if (error || !report) return (
+  if (!report) return (
     <div className="space-y-4">
       <Button variant="ghost" asChild><Link to="/reports"><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Link></Button>
       <p className="text-destructive">Relatório não encontrado.</p>
@@ -300,18 +304,28 @@ function ReportDetailPage() {
             Iniciada em {new Date(report.createdAt).toLocaleDateString("pt-BR")}
           </p>
         </div>
-        {canEdit && (
+        {canEdit && !report._pending && (
           <Button
             variant="ghost" size="icon"
             className="shrink-0 text-muted-foreground hover:text-destructive mt-0.5"
             title="Excluir relatório"
-            onClick={() => { if (confirm("Excluir este relatório e todos os seus lançamentos?")) deleteReport.mutate(); }}
+            onClick={() => setDeleteReportOpen(true)}
             disabled={deleteReport.isPending}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
       </div>
+
+      {/* Banner de relatório pendente */}
+      {report._pending && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <WifiOff className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            <strong>Aguardando sincronização.</strong> Este relatório será enviado automaticamente quando você voltar a ficar online.
+          </p>
+        </div>
+      )}
 
       {/* Localização + progresso */}
       <Card>
@@ -387,8 +401,8 @@ function ReportDetailPage() {
             <CardTitle className="text-base">Lançamentos</CardTitle>
             <CardDescription>{report.lancamentos.length} lançamento(s) registrado(s)</CardDescription>
           </div>
-          <Button onClick={openDialog} className="w-full sm:w-auto" disabled={isClosed}>
-            <Plus /> {isClosed ? "Atividade Finalizada" : "Lançar Relatório"}
+          <Button onClick={openDialog} className="w-full sm:w-auto" disabled={isClosed || !!report._pending}>
+            <Plus /> {report._pending ? "Aguardando sincronização" : isClosed ? "Atividade Finalizada" : "Lançar Relatório"}
           </Button>
         </CardHeader>
         <CardContent>
@@ -441,7 +455,7 @@ function ReportDetailPage() {
                             <Button
                               variant="ghost" size="icon"
                               className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={() => { if (confirm("Excluir este lançamento?")) deleteLanc.mutate(l.id); }}
+                              onClick={() => setDeleteLancId(l.id)}
                               disabled={deleteLanc.isPending}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -470,6 +484,32 @@ function ReportDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Confirmar exclusão do relatório */}
+      <ConfirmDialog
+        open={deleteReportOpen}
+        onOpenChange={setDeleteReportOpen}
+        title="Excluir relatório"
+        description="Tem certeza? Todos os lançamentos serão excluídos junto. Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        isPending={deleteReport.isPending}
+        onConfirm={() => deleteReport.mutate()}
+      />
+
+      {/* Confirmar exclusão de lançamento */}
+      <ConfirmDialog
+        open={!!deleteLancId}
+        onOpenChange={(open) => !open && setDeleteLancId(null)}
+        title="Excluir lançamento"
+        description="Tem certeza que deseja excluir este lançamento?"
+        confirmLabel="Excluir"
+        isPending={deleteLanc.isPending}
+        onConfirm={() => {
+          if (deleteLancId) {
+            deleteLanc.mutate(deleteLancId, { onSuccess: () => setDeleteLancId(null) });
+          }
+        }}
+      />
 
       {/* Dialog Lançar Relatório */}
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>

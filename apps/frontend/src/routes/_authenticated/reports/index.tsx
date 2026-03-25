@@ -70,12 +70,86 @@ function copyReport(r: ReportSummary) {
   navigator.clipboard.writeText(lines.join("\n"));
 }
 
+function ReportRow({ r, copiedId, onCopy }: { r: ReportSummary; copiedId: string | null; onCopy: (r: ReportSummary) => void }) {
+  const lastLancamento = r.lancamentos.at(-1);
+  const totalHa = r.lancamentos.reduce((s, l) => s + l.hectares, 0);
+  const pct = r.talhao.area > 0 ? Math.min(100, (totalHa / r.talhao.area) * 100) : 0;
+  const status = lastLancamento ? statusLabel[lastLancamento.status] : null;
+
+  return (
+    <div className="flex items-center gap-2 py-4 -mx-2 px-2">
+      {r._pending ? (
+        <Link
+          to="/reports/$id"
+          params={{ id: r.id }}
+          className="flex items-center justify-between gap-4 flex-1 min-w-0 hover:bg-muted/40 rounded-md transition-colors px-2 -mx-2 opacity-70"
+        >
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold">{r.activity.name}</span>
+              <Badge variant="outline" className="text-xs text-amber-600 border-amber-400 flex items-center gap-1">
+                <WifiOff className="h-3 w-3" />Aguardando sincronização
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
+              <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        </Link>
+      ) : (
+        <Link
+          to="/reports/$id"
+          params={{ id: r.id }}
+          className="flex items-center justify-between gap-4 flex-1 min-w-0 hover:bg-muted/40 rounded-md transition-colors px-2 -mx-2"
+        >
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold">{r.talhao.codigo}</span>
+              {status && <Badge variant={status.variant} className="text-xs">{status.label}</Badge>}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
+              <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
+              <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{totalHa.toLocaleString("pt-BR")} / {r.talhao.area.toLocaleString("pt-BR")} ha</span>
+            </div>
+            <div className="w-full max-w-xs h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        </Link>
+      )}
+
+      {!r._pending && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={() => onCopy(r)}
+        >
+          {copiedId === r.id
+            ? <Check className="h-3.5 w-3.5 text-primary" />
+            : <Copy className="h-3.5 w-3.5" />
+          }
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ReportsIndexPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("");
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: fetchReports,
+    select: (data) => Array.isArray(data) ? data as ReportSummary[] : [],
   });
 
   const { data: fazendas = [] } = useQuery({ queryKey: ["fazendas"], queryFn: fetchFazendas });
@@ -90,6 +164,30 @@ function ReportsIndexPage() {
   const filtered = selectedFazendaId && selectedFazendaId !== "none"
     ? reports.filter(r => r.fazenda.id === selectedFazendaId)
     : reports;
+
+  // Group by activity
+  const activitiesMap = new Map<string, { id: string; name: string; reports: ReportSummary[] }>();
+  for (const r of filtered) {
+    const key = r.activity.id;
+    if (!activitiesMap.has(key)) {
+      activitiesMap.set(key, { id: r.activity.id, name: r.activity.name, reports: [] });
+    }
+    activitiesMap.get(key)!.reports.push(r);
+  }
+  const activities = Array.from(activitiesMap.values());
+
+  // Set default tab when activities load
+  useEffect(() => {
+    if (activities.length > 0 && (!activeTab || !activitiesMap.has(activeTab))) {
+      setActiveTab(activities[0].id);
+    }
+  }, [filtered.length, selectedFazendaId]);
+
+  function handleCopy(r: ReportSummary) {
+    copyReport(r);
+    setCopiedId(r.id);
+    setTimeout(() => setCopiedId(null), 2500);
+  }
 
   return (
     <div className="space-y-6">
@@ -121,101 +219,52 @@ function ReportsIndexPage() {
         </Select>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Ordens de Serviço</CardTitle>
-          <CardDescription>
-            {isLoading ? "Carregando..." : `${filtered.length} ordem(ns) registrada(s)`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando...</p>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <FileText className="h-12 w-12 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground text-center">
-                Nenhuma atividade iniciada ainda.<br />
-                Clique em "Iniciar Atividade" para começar.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {filtered.map((r) => {
-                const lastLancamento = r.lancamentos.at(-1);
-                const totalHa = r.lancamentos.reduce((s, l) => s + l.hectares, 0);
-                const pct = r.talhao.area > 0 ? Math.min(100, (totalHa / r.talhao.area) * 100) : 0;
-                const status = lastLancamento ? statusLabel[lastLancamento.status] : null;
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <FileText className="h-12 w-12 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground text-center">
+            Nenhuma atividade iniciada ainda.<br />
+            Clique em "Iniciar Atividade" para começar.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex gap-1 border-b overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
+            {activities.map(a => (
+              <button
+                key={a.id}
+                onClick={() => setActiveTab(a.id)}
+                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap -mb-px ${
+                  activeTab === a.id
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {a.name}
+                <span className="ml-1.5 text-xs opacity-60">({a.reports.length})</span>
+              </button>
+            ))}
+          </div>
 
-                return (
-                  <div key={r.id} className="flex items-center gap-2 py-4 -mx-2 px-2">
-                    {r._pending ? (
-                      // Pending (offline) entries — not navigable yet
-                      <div className="flex items-center justify-between gap-4 flex-1 min-w-0 px-2 -mx-2 opacity-70">
-                        <div className="min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold">{r.activity.name}</span>
-                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-400 flex items-center gap-1">
-                              <WifiOff className="h-3 w-3" />Aguardando sincronização
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
-                            <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <Link
-                        to="/reports/$id"
-                        params={{ id: r.id }}
-                        className="flex items-center justify-between gap-4 flex-1 min-w-0 hover:bg-muted/40 rounded-md transition-colors px-2 -mx-2"
-                      >
-                        <div className="min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold">{r.activity.name}</span>
-                            {status && <Badge variant={status.variant} className="text-xs">{status.label}</Badge>}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1"><Tractor className="h-3 w-3" />{r.fazenda.name}</span>
-                            <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{r.talhao.codigo}</span>
-                            <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{totalHa.toLocaleString("pt-BR")} / {r.talhao.area.toLocaleString("pt-BR")} ha</span>
-                          </div>
-                          <div className="w-full max-w-xs h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                      </Link>
-                    )}
-
-                    {!r._pending && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          copyReport(r);
-                          setCopiedId(r.id);
-                          setTimeout(() => setCopiedId(null), 2500);
-                        }}
-                      >
-                        {copiedId === r.id
-                          ? <Check className="h-3.5 w-3.5 text-primary" />
-                          : <Copy className="h-3.5 w-3.5" />
-                        }
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          {activities.filter(a => a.id === activeTab).map(a => (
+            <Card key={a.id}>
+              <CardHeader>
+                <CardTitle>{a.name}</CardTitle>
+                <CardDescription>{a.reports.length} ordem(ns) registrada(s)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="divide-y">
+                  {a.reports.map(r => (
+                    <ReportRow key={r.id} r={r} copiedId={copiedId} onCopy={handleCopy} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

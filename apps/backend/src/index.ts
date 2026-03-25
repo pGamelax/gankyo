@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { auth } from "./auth";
+import { addConnection, removeConnection } from "./events";
 import { reportsRouter } from "./routes/reports";
 import { preferencesRouter } from "./routes/preferences";
 import { dashboardRouter } from "./routes/dashboard";
@@ -44,6 +45,52 @@ const app = new Elysia()
   .use(fazendasAdminRouter)
   .use(talhoesAdminRouter)
   .get("/health", () => ({ status: "ok" }))
+  .get("/events", async ({ request, set }) => {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) {
+      set.status = 401;
+      return { message: "Unauthorized" };
+    }
+
+    let send: ((data: string) => void) | null = null;
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const enc = new TextEncoder();
+        send = (data: string) => controller.enqueue(enc.encode(data));
+        addConnection(send);
+
+        // Ping inicial
+        controller.enqueue(enc.encode("data: {\"ping\":true}\n\n"));
+
+        // Heartbeat a cada 25s para manter conexão viva em proxies
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(enc.encode("data: {\"ping\":true}\n\n"));
+          } catch {
+            clearInterval(heartbeat);
+          }
+        }, 25_000);
+
+        request.signal.addEventListener("abort", () => {
+          clearInterval(heartbeat);
+          if (send) removeConnection(send);
+        });
+      },
+      cancel() {
+        if (send) removeConnection(send);
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  })
   .listen(process.env.PORT ?? 3001);
 
 console.log(

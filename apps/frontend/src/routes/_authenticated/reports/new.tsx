@@ -117,20 +117,27 @@ function NewReportPage() {
         meta:   { tempId },
       });
 
+      const now = new Date().toISOString();
+      const pendingReport = {
+        id:          tempId,
+        userId:      "",
+        _pending:    true,
+        createdAt:   now,
+        fazenda:     { id: selectedFazenda.id,  name: selectedFazenda.name   },
+        talhao:      { id: selectedTalhao.id,   codigo: selectedTalhao.codigo, area: selectedTalhao.area },
+        activity:    { id: selectedActivity.id, name: selectedActivity.name  },
+        insumos:     parsedInsumos.map((ins, i) => ({ id: `tmp-ins-${i}`, ...ins })),
+        lancamentos: [],
+      };
+
       // Optimistic insert: aparece na lista imediatamente
       qc.setQueryData(["reports"], (old: unknown[] | undefined) => [
-        {
-          id:         tempId,
-          _pending:   true,
-          createdAt:  new Date().toISOString(),
-          fazenda:    { id: selectedFazenda.id,  name: selectedFazenda.name   },
-          talhao:     { id: selectedTalhao.id,   codigo: selectedTalhao.codigo, area: selectedTalhao.area },
-          activity:   { id: selectedActivity.id, name: selectedActivity.name  },
-          insumos:    parsedInsumos.map((ins, i) => ({ id: `tmp-ins-${i}`, ...ins })),
-          lancamentos: [],
-        },
+        pendingReport,
         ...(old ?? []),
       ]);
+
+      // Popula cache de detalhe para navegação offline
+      qc.setQueryData(["reports", tempId], pendingReport);
 
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
       navigate({ to: "/reports" });
