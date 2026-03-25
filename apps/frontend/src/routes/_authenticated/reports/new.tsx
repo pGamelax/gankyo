@@ -109,14 +109,6 @@ function NewReportPage() {
       const selectedTalhao   = allTalhoes.find(t => t.id === talhaoId)!;
       const selectedActivity = activities.find(a => a.id === activityId)!;
 
-      await enqueue({
-        type:   "create-report",
-        method: "POST",
-        url:    apiUrl("/reports"),
-        body:   { fazendaId, talhaoId, activityId, insumos: parsedInsumos },
-        meta:   { tempId },
-      });
-
       const now = new Date().toISOString();
       const pendingReport = {
         id:          tempId,
@@ -129,6 +121,15 @@ function NewReportPage() {
         insumos:     parsedInsumos.map((ins, i) => ({ id: `tmp-ins-${i}`, ...ins })),
         lancamentos: [],
       };
+
+      await enqueue({
+        type:     "create-report",
+        method:   "POST",
+        url:      apiUrl("/reports"),
+        body:     { fazendaId, talhaoId, activityId, insumos: parsedInsumos },
+        meta:     { tempId },
+        snapshot: pendingReport,
+      });
 
       // Optimistic insert: aparece na lista imediatamente
       qc.setQueryData(["reports"], (old: unknown[] | undefined) => [

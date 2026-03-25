@@ -51,6 +51,37 @@ function AuthenticatedLayout() {
     getQueue().then((q) => setPendingCount(q.length));
   }, []);
 
+  // Reidrata cache do React Query a partir dos snapshots da fila (necessário ao reiniciar o app)
+  const rehydrateQueue = useCallback(async () => {
+    const queue = await getQueue();
+    for (const action of queue) {
+      if (action.type === "create-report" && action.snapshot && action.meta?.tempId) {
+        const pending = action.snapshot as { id: string };
+        qc.setQueryData(["reports"], (old: unknown[] | undefined) => {
+          const list = (old ?? []) as Array<{ id: string }>;
+          if (list.some(r => r.id === pending.id)) return list;
+          return [pending, ...list];
+        });
+        qc.setQueryData(["reports", pending.id], (old: unknown) => old ?? pending);
+      }
+      if (action.type === "add-lancamento" && action.snapshot && action.meta?.reportId) {
+        const lanc = action.snapshot as { id: string };
+        const reportId = action.meta.reportId;
+        qc.setQueryData(["reports", reportId], (old: unknown) => {
+          if (!old) return old;
+          const r = old as { lancamentos: Array<{ id: string }> };
+          if (r.lancamentos.some(l => l.id === lanc.id)) return old;
+          return { ...r, lancamentos: [...r.lancamentos, lanc] };
+        });
+      }
+    }
+  }, [qc]);
+
+  // Na montagem: reidrata imediatamente (cobre o caso offline)
+  useEffect(() => {
+    rehydrateQueue();
+  }, [rehydrateQueue]);
+
   // Quando voltar online: sincroniza a fila
   useEffect(() => {
     refreshCount();
@@ -202,9 +233,9 @@ function AuthenticatedLayout() {
       }
     }
 
-    prefetchRecent();
+    prefetchRecent().then(() => { if (!cancelled) rehydrateQueue(); });
     return () => { cancelled = true; };
-  }, [isOnline, qc]);
+  }, [isOnline, qc, rehydrateQueue]);
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">

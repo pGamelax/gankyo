@@ -35,6 +35,8 @@ export type OfflineAction = {
   body?:     object;
   /** Extra data used post-sync (e.g. reportId to invalidate, tempId mapping) */
   meta?:     Record<string, string>;
+  /** Full optimistic object — used to rehydrate React Query cache on app restart */
+  snapshot?: unknown;
   createdAt: number;
 };
 

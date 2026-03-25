@@ -225,7 +225,7 @@ function ReportDetailPage() {
       data,
       `Fazenda: ${report.fazenda.name}`,
       "",
-      report.activity.name,
+      `Atividade: ${report.activity.name}`,
       `Talhão: ${report.talhao.codigo}`,
       `Área: ${l.hectares.toLocaleString("pt-BR")} ha`,
       `Status: ${statusLbl}`,
@@ -256,23 +256,19 @@ function ReportDetailPage() {
     // Se offline: enfileira + insere lancamento optimista no cache
     if (!navigator.onLine) {
       const tempLancId = crypto.randomUUID();
+      const pendingLanc = { id: tempLancId, hectares: haNum, status, data, createdAt: new Date().toISOString(), _pending: true as const, insumos: [] };
       await enqueue({
-        type:   "add-lancamento",
-        method: "POST",
-        url:    apiUrl(`/reports/${id}/lancamentos`),
-        body:   { hectares: haNum, status, data },
-        meta:   { reportId: id, tempLancId },
+        type:     "add-lancamento",
+        method:   "POST",
+        url:      apiUrl(`/reports/${id}/lancamentos`),
+        body:     { hectares: haNum, status, data },
+        meta:     { reportId: id, tempLancId },
+        snapshot: pendingLanc,
       });
       // Optimistic insert no detalhe do relatório
       qc.setQueryData(["reports", id], (old: ReportDetail | undefined) => {
         if (!old) return old;
-        return {
-          ...old,
-          lancamentos: [
-            ...old.lancamentos,
-            { id: tempLancId, hectares: haNum, status, data, createdAt: new Date().toISOString(), _pending: true },
-          ],
-        };
+        return { ...old, lancamentos: [...old.lancamentos, pendingLanc] };
       });
       (window as unknown as Record<string, () => void>).__gankyoRefreshPendingCount?.();
       closeDialog();
