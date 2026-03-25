@@ -1,3 +1,4 @@
+import React from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -8,9 +9,13 @@ import {
   LogOut,
   ShieldCheck,
   X,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut, useSession } from "@/lib/auth-client";
+import { useTheme, type Theme } from "@/lib/use-theme";
 
 const baseNavItems = [
   { label: "Dashboard",    to: "/dashboard",   icon: LayoutDashboard },
@@ -31,10 +36,17 @@ function getInitials(name?: string | null) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+const THEMES: { value: Theme; icon: React.ElementType; label: string }[] = [
+  { value: "light",  icon: Sun,     label: "Claro"    },
+  { value: "system", icon: Monitor, label: "Sistema"  },
+  { value: "dark",   icon: Moon,    label: "Escuro"   },
+];
+
 export default function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const navigate = useNavigate();
   const { location } = useRouterState();
   const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
 
   const isAdmin = session?.user?.role === "admin";
 
@@ -147,6 +159,24 @@ export default function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
             </div>
           </div>
         )}
+        {/* Theme toggle */}
+        <div className="flex items-center gap-1 px-2 py-1.5 mb-1">
+          {THEMES.map(({ value, icon: Icon, label }) => (
+            <button
+              key={value}
+              title={label}
+              onClick={() => setTheme(value)}
+              className={cn(
+                "flex-1 flex items-center justify-center py-1.5 rounded-md transition-colors",
+                theme === value
+                  ? "bg-sidebar-accent text-sidebar-foreground"
+                  : "text-sidebar-foreground/30 hover:text-sidebar-foreground/60"
+              )}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
