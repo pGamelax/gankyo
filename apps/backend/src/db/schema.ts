@@ -149,6 +149,18 @@ export const lancamento = pgTable("lancamento", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/** Quantidades reais de insumos por lançamento (sobrescreve o cálculo automático) */
+export const lancamentoInsumo = pgTable("lancamento_insumo", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  lancamentoId: uuid("lancamento_id")
+    .notNull()
+    .references(() => lancamento.id, { onDelete: "cascade" }),
+  reportInsumoId: uuid("report_insumo_id")
+    .notNull()
+    .references(() => reportInsumo.id, { onDelete: "cascade" }),
+  quantidade: doublePrecision("quantidade").notNull(),
+});
+
 /**
  * Regras de programação automática.
  * Ex: "1º Pré Emergente" deve ser feito 15 dias após "Plantio Manual" atingir status "iniciado".
@@ -200,8 +212,14 @@ export const reportInsumoRelations = relations(reportInsumo, ({ one }) => ({
   report: one(report, { fields: [reportInsumo.reportId], references: [report.id] }),
 }));
 
-export const lancamentoRelations = relations(lancamento, ({ one }) => ({
+export const lancamentoRelations = relations(lancamento, ({ one, many }) => ({
   report: one(report, { fields: [lancamento.reportId], references: [report.id] }),
+  insumos: many(lancamentoInsumo),
+}));
+
+export const lancamentoInsumoRelations = relations(lancamentoInsumo, ({ one }) => ({
+  lancamento: one(lancamento, { fields: [lancamentoInsumo.lancamentoId], references: [lancamento.id] }),
+  reportInsumo: one(reportInsumo, { fields: [lancamentoInsumo.reportInsumoId], references: [reportInsumo.id] }),
 }));
 
 export const regraProgramacaoRelations = relations(regraProgramacao, ({ one }) => ({
@@ -230,6 +248,7 @@ export type Report = typeof report.$inferSelect;
 export type NewReport = typeof report.$inferInsert;
 export type ReportInsumo = typeof reportInsumo.$inferSelect;
 export type Lancamento = typeof lancamento.$inferSelect;
+export type LancamentoInsumo = typeof lancamentoInsumo.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;
 export type User = typeof user.$inferSelect;
 export type Session = typeof session.$inferSelect;

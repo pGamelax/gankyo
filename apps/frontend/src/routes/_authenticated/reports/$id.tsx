@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,8 @@ export const Route = createFileRoute("/_authenticated/reports/$id")({
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Insumo     = { id: string; nome: string; recomendacaoHa: number };
-type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string; _pending?: boolean };
+type LancamentoInsumo = { id: string; reportInsumoId: string; quantidade: number };
+type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string; _pending?: boolean; insumos: LancamentoInsumo[] };
 type ReportDetail = {
   id: string;
   userId: string;
@@ -116,16 +117,21 @@ function ReportDetailPage() {
     setInsumoValues(calcInsumos(ha));
   }
 
-  // ── Quando status muda para finalizado/iniciado_finalizado, preenche ha restante
-  useEffect(() => {
-    if (status === "finalizado" || status === "iniciado_finalizado") {
-      const ha = haRestante > 0 ? haRestante : 0;
-      setHectares(String(ha));
-      setInsumoValues(calcInsumos(ha));
-    }
-  }, [status, haRestante]);
+  function fillRestante() {
+    const ha = haRestante > 0 ? haRestante : 0;
+    setHectares(String(ha));
+    setInsumoValues(calcInsumos(ha));
+  }
 
   const haNum = parseFloat(hectares) || 0;
+
+  function buildInsumos() {
+    if (!report || Object.keys(insumoValues).length === 0) return undefined;
+    return report.insumos.map(ins => ({
+      reportInsumoId: ins.id,
+      quantidade: parseFloat(insumoValues[ins.id] ?? String(haNum * ins.recomendacaoHa)) || 0,
+    }));
+  }
 
   // ── Mutação lançar ─────────────────────────────────────────────────────────
   const lancar = useMutation({
@@ -134,7 +140,7 @@ function ReportDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ hectares: haNum, status, data }),
+        body: JSON.stringify({ hectares: haNum, status, data, insumos: buildInsumos() }),
       });
       if (!res.ok) throw new Error("Falha ao lançar relatório");
       return res.json();
@@ -182,7 +188,7 @@ function ReportDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ hectares: haNum, status, data }),
+        body: JSON.stringify({ hectares: haNum, status, data, insumos: buildInsumos() }),
       });
       if (!res.ok) throw new Error("Falha ao editar lançamento");
       return res.json();
@@ -198,7 +204,12 @@ function ReportDetailPage() {
   function openEdit(l: Lancamento) {
     setEditingLanc(l);
     setHectares(String(l.hectares));
-    setInsumoValues(calcInsumos(l.hectares));
+    // Usa valores salvos; se não houver, calcula da área
+    if (l.insumos && l.insumos.length > 0) {
+      setInsumoValues(Object.fromEntries(l.insumos.map(li => [li.reportInsumoId, String(li.quantidade)])));
+    } else {
+      setInsumoValues(calcInsumos(l.hectares));
+    }
     setStatus(l.status as StatusValue);
     setData(l.data);
     setFormError(null);
@@ -223,8 +234,9 @@ function ReportDetailPage() {
     if (report.insumos.length > 0) {
       lines.push("", "Insumos");
       for (const ins of report.insumos) {
-        const qty = (l.hectares * ins.recomendacaoHa).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
-        lines.push(`${ins.nome}: ${qty}`);
+        const saved = l.insumos?.find(li => li.reportInsumoId === ins.id);
+        const raw = saved ? saved.quantidade : l.hectares * ins.recomendacaoHa;
+        lines.push(`${ins.nome}: ${raw.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`);
       }
     }
 
@@ -467,14 +479,18 @@ function ReportDetailPage() {
                     <div className="flex items-center gap-4 text-sm">
                       <span><strong>{l.hectares.toLocaleString("pt-BR")}</strong> ha realizados</span>
                     </div>
-                    {/* Insumos calculados para este lançamento */}
+                    {/* Insumos do lançamento — usa valor salvo; se não houver, calcula */}
                     {report.insumos.length > 0 && (
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {report.insumos.map(ins => (
-                          <span key={ins.id} className="text-xs text-muted-foreground">
-                            {ins.nome}: <strong>{(l.hectares * ins.recomendacaoHa).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</strong>
-                          </span>
-                        ))}
+                        {report.insumos.map(ins => {
+                          const saved = l.insumos?.find(li => li.reportInsumoId === ins.id);
+                          const qty = saved ? saved.quantidade : l.hectares * ins.recomendacaoHa;
+                          return (
+                            <span key={ins.id} className="text-xs text-muted-foreground">
+                              {ins.nome}: <strong>{qty.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</strong>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -551,16 +567,22 @@ function ReportDetailPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {(status === "finalizado" || status === "iniciado_finalizado") && (
-                <p className="text-xs text-muted-foreground">
-                  Hectares preenchidos automaticamente com o restante do talhão.
-                </p>
-              )}
             </div>
 
             {/* Hectares */}
             <div className="space-y-1.5">
-              <Label htmlFor="lancamento-ha">Hectares realizados *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="lancamento-ha">Hectares realizados *</Label>
+                {haRestante > 0 && !editingLanc && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={fillRestante}
+                  >
+                    Preencher restante ({haRestante.toLocaleString("pt-BR")} ha)
+                  </button>
+                )}
+              </div>
               <Input
                 id="lancamento-ha"
                 type="number"

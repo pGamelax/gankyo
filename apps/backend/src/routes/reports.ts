@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { db } from "../db";
-import { report, reportInsumo, lancamento, talhao } from "../db/schema";
+import { report, reportInsumo, lancamento, lancamentoInsumo, talhao } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "../auth";
 import { broadcast } from "../events";
@@ -38,7 +38,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         talhao: true,
         activity: true,
         insumos: true,
-        lancamentos: { orderBy: (l, { asc }) => [asc(l.data), asc(l.createdAt)] },
+        lancamentos: {
+          orderBy: (l, { asc }) => [asc(l.data), asc(l.createdAt)],
+          with: { insumos: true },
+        },
       },
     });
     if (!r) { set.status = 404; return { message: "Relatório não encontrado" }; }
@@ -115,6 +118,17 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         .insert(lancamento)
         .values({ reportId: params.id, hectares: body.hectares, status: body.status, data: body.data ?? today })
         .returning();
+
+      if (body.insumos && body.insumos.length > 0) {
+        await db.insert(lancamentoInsumo).values(
+          body.insumos.map((ins) => ({
+            lancamentoId: created.id,
+            reportInsumoId: ins.reportInsumoId,
+            quantidade: ins.quantidade,
+          }))
+        );
+      }
+
       broadcast(["reports", `reports/${params.id}`, "dashboard"]);
       return created;
     },
@@ -129,6 +143,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           t.Literal("iniciado_finalizado"),
         ]),
         data: t.Optional(t.String()),
+        insumos: t.Optional(t.Array(t.Object({
+          reportInsumoId: t.String(),
+          quantidade: t.Number({ minimum: 0 }),
+        }))),
       }),
     }
   )
@@ -152,6 +170,20 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         })
         .where(eq(lancamento.id, params.lancId))
         .returning();
+
+      if (body.insumos !== undefined) {
+        await db.delete(lancamentoInsumo).where(eq(lancamentoInsumo.lancamentoId, params.lancId));
+        if (body.insumos.length > 0) {
+          await db.insert(lancamentoInsumo).values(
+            body.insumos.map((ins) => ({
+              lancamentoId: params.lancId,
+              reportInsumoId: ins.reportInsumoId,
+              quantidade: ins.quantidade,
+            }))
+          );
+        }
+      }
+
       broadcast(["reports", `reports/${params.id}`, "dashboard"]);
       return updated;
     },
@@ -164,6 +196,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           t.Literal("finalizado"), t.Literal("iniciado_finalizado"),
         ])),
         data: t.Optional(t.String()),
+        insumos: t.Optional(t.Array(t.Object({
+          reportInsumoId: t.String(),
+          quantidade: t.Number({ minimum: 0 }),
+        }))),
       }),
     }
   )
