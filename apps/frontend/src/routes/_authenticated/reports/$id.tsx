@@ -72,7 +72,7 @@ function ReportDetailPage() {
   const qc = useQueryClient();
   const { data: session } = useSession();
 
-  const { data: report, isLoading, error } = useQuery({
+  const { data: report, isLoading } = useQuery({
     queryKey: ["reports", id],
     queryFn: () => fetchReport(id),
   });

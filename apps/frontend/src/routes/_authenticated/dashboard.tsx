@@ -2,11 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Tractor, Layers, FileText, Activity, CheckCircle2,
-  Clock, RotateCcw, TrendingUp, ArrowRight, Target,
+  Tractor, FileText, CheckCircle2,
+  Clock, RotateCcw, TrendingUp, ArrowRight,
   AlertTriangle, Wheat,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useRouteContext } from "@tanstack/react-router";
