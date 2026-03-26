@@ -296,11 +296,6 @@ function AuthenticatedLayout() {
         </main>
       </div>
 
-      {/* Banner offline (apenas quando offline) */}
-      {!isOnline && (
-        <OfflineBanner pendingCount={pendingCount} isSyncing={isSyncing} />
-      )}
-
       {/* Banner de sincronização concluída (aparece brevemente ao voltar online) */}
       {isOnline && showSynced && <SyncedBanner />}
     </div>
