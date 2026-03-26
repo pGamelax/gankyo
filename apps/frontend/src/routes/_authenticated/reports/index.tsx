@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { FileText, Plus, Tractor, Layers, Activity, ChevronRight, Copy, Check, WifiOff } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,10 +33,14 @@ type ReportSummary = {
 type Fazenda = { id: string; name: string };
 type Preferences = { defaultFazendaId: string | null };
 
-async function fetchReports(): Promise<ReportSummary[]> {
+async function fetchReports(qc: import("@tanstack/react-query").QueryClient): Promise<ReportSummary[]> {
   const res = await fetch(apiUrl("/reports"), { credentials: "include" });
   if (!res.ok) throw new Error("Falha ao carregar relatórios");
-  return res.json();
+  const fresh = (await res.json()) as ReportSummary[];
+  // Preserve pending offline items that haven't synced yet
+  const cached = (qc.getQueryData<ReportSummary[]>(["reports"]) ?? []);
+  const pending = cached.filter(r => r._pending && !fresh.some(s => s.id === r.id));
+  return pending.length > 0 ? [...pending, ...fresh] : fresh;
 }
 
 const fetchFazendas = (): Promise<Fazenda[]> =>
@@ -143,12 +147,13 @@ function ReportRow({ r, copiedId, onCopy }: { r: ReportSummary; copiedId: string
 }
 
 function ReportsIndexPage() {
+  const qc = useQueryClient();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["reports"],
-    queryFn: fetchReports,
+    queryFn: () => fetchReports(qc),
     select: (data) => Array.isArray(data) ? data as ReportSummary[] : [],
   });
 

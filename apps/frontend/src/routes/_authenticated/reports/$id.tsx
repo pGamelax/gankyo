@@ -60,10 +60,15 @@ const statusMeta: Record<string, { label: string; variant: "default" | "secondar
   iniciado_finalizado: { label: "Iniciado/Finalizado", variant: "outline",   icon: CheckCircle2  },
 };
 
-async function fetchReport(id: string): Promise<ReportDetail> {
+async function fetchReport(id: string, qc: import("@tanstack/react-query").QueryClient): Promise<ReportDetail> {
   const res = await fetch(apiUrl(`/reports/${id}`), { credentials: "include" });
   if (!res.ok) throw new Error("Relatório não encontrado");
-  return res.json();
+  const fresh = (await res.json()) as ReportDetail;
+  // Preserve pending offline lancamentos that haven't synced yet
+  const cached = qc.getQueryData<ReportDetail>(["reports", id]);
+  if (!cached) return fresh;
+  const pending = cached.lancamentos.filter(l => l._pending && !fresh.lancamentos.some(sl => sl.id === l.id));
+  return pending.length > 0 ? { ...fresh, lancamentos: [...fresh.lancamentos, ...pending] } : fresh;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -75,7 +80,7 @@ function ReportDetailPage() {
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["reports", id],
-    queryFn: () => fetchReport(id),
+    queryFn: () => fetchReport(id, qc),
   });
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
