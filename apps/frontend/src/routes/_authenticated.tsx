@@ -8,7 +8,7 @@ import { Menu, TreePine } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import AppSidebar from "@/components/layout/app-sidebar";
-import { OfflineBanner, SyncedBanner } from "@/components/offline-banner";
+import { SyncedBanner } from "@/components/offline-banner";
 import { useOnline } from "@/hooks/use-online";
 import { flushQueue, getQueue } from "@/lib/offline-queue";
 import { apiUrl } from "@/lib/api";
@@ -43,7 +43,7 @@ function AuthenticatedLayout() {
   const qc = useQueryClient();
 
   const [pendingCount, setPendingCount] = useState(0);
-  const [isSyncing,   setIsSyncing   ] = useState(false);
+  const [, setIsSyncing] = useState(false);
   const [showSynced,  setShowSynced  ] = useState(false);
 
   // Atualiza contagem de pendentes
