@@ -414,8 +414,8 @@ function ReportDetailPage() {
             <CardTitle className="text-base">Lançamentos</CardTitle>
             <CardDescription>{report.lancamentos.length} lançamento(s) registrado(s)</CardDescription>
           </div>
-          <Button onClick={openDialog} className="w-full sm:w-auto" disabled={isClosed || !!report._pending}>
-            <Plus /> {report._pending ? "Aguardando sincronização" : isClosed ? "Atividade Finalizada" : "Lançar Relatório"}
+          <Button onClick={openDialog} className="w-full sm:w-auto" disabled={isClosed}>
+            <Plus /> {isClosed ? "Atividade Finalizada" : "Lançar Relatório"}
           </Button>
         </CardHeader>
         <CardContent>
