@@ -132,6 +132,7 @@ export const reportInsumo = pgTable("report_insumo", {
     .notNull()
     .references(() => report.id, { onDelete: "cascade" }),
   nome: text("nome").notNull(),
+  unidade: text("unidade").notNull().default("lts"),
   recomendacaoHa: doublePrecision("recomendacao_ha").notNull(),
 });
 

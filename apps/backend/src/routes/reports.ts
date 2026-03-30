@@ -23,7 +23,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         fazenda: { columns: { id: true, name: true } },
         talhao: { columns: { id: true, codigo: true, area: true } },
         activity: { columns: { id: true, name: true } },
-        insumos: { columns: { id: true, nome: true, recomendacaoHa: true } },
+        insumos: { columns: { id: true, nome: true, unidade: true, recomendacaoHa: true } },
         lancamentos: { columns: { id: true, hectares: true, status: true } },
       },
       orderBy: (r, { desc }) => [desc(r.createdAt)],
@@ -66,6 +66,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           body.insumos.map((ins) => ({
             reportId: created.id,
             nome: ins.nome,
+            unidade: ins.unidade,
             recomendacaoHa: ins.recomendacaoHa,
           }))
         );
@@ -81,6 +82,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         insumos: t.Array(
           t.Object({
             nome: t.String({ minLength: 1 }),
+            unidade: t.String({ minLength: 1 }),
             recomendacaoHa: t.Number({ minimum: 0 }),
           })
         ),

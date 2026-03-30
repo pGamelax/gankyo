@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/reports/new")({
 type Fazenda  = { id: string; name: string };
 type Talhao   = { id: string; codigo: string; area: number; fazendaId: string };
 type Activity = { id: string; name: string };
-type Insumo   = { nome: string; recomendacaoHa: string };
+type Insumo   = { nome: string; unidade: string; recomendacaoHa: string };
 type ReportExistente = { talhao: { id: string }; activity: { id: string } };
 
 const fetchFazendas   = () => fetch(apiUrl("/fazendas"),   { credentials: "include" }).then(r => r.json()) as Promise<Fazenda[]>;
@@ -54,7 +54,7 @@ function NewReportPage() {
   }
 
   function addInsumo() {
-    setInsumos(prev => [...prev, { nome: "", recomendacaoHa: "" }]);
+    setInsumos(prev => [...prev, { nome: "", unidade: "lts", recomendacaoHa: "" }]);
   }
 
   function updateInsumo(idx: number, field: keyof Insumo, value: string) {
@@ -77,6 +77,7 @@ function NewReportPage() {
           activityId,
           insumos: insumos.map(ins => ({
             nome: ins.nome.trim(),
+            unidade: ins.unidade.trim(),
             recomendacaoHa: parseFloat(ins.recomendacaoHa),
           })),
         }),
@@ -95,14 +96,15 @@ function NewReportPage() {
     if (!fazendaId)  { setFormError("Selecione a fazenda.");   return; }
     if (!talhaoId)   { setFormError("Selecione o talhão.");    return; }
     if (!activityId) { setFormError("Selecione a atividade."); return; }
-    const invalidInsumo = insumos.find(ins => !ins.nome.trim() || isNaN(parseFloat(ins.recomendacaoHa)));
-    if (invalidInsumo) { setFormError("Preencha nome e recomendação de todos os insumos."); return; }
+    const invalidInsumo = insumos.find(ins => !ins.nome.trim() || !ins.unidade.trim() || isNaN(parseFloat(ins.recomendacaoHa)));
+    if (invalidInsumo) { setFormError("Preencha nome, unidade e recomendação de todos os insumos."); return; }
 
     // Se offline: salva na fila + insere item optimista no cache
     if (!navigator.onLine) {
       const tempId  = crypto.randomUUID();
       const parsedInsumos = insumos.map(ins => ({
         nome: ins.nome.trim(),
+        unidade: ins.unidade.trim(),
         recomendacaoHa: parseFloat(ins.recomendacaoHa),
       }));
       const selectedFazenda  = fazendas.find(f => f.id === fazendaId)!;
@@ -256,8 +258,23 @@ function NewReportPage() {
                       disabled={create.isPending}
                     />
                   </div>
-                  <div className="w-full sm:w-44 space-y-1.5">
-                    <Label className="text-xs">Recomendação (por ha)</Label>
+                  <div className="w-full sm:w-28 space-y-1.5">
+                    <Label className="text-xs">Unidade</Label>
+                    <Select
+                      value={ins.unidade}
+                      onValueChange={v => updateInsumo(idx, "unidade", v)}
+                      disabled={create.isPending}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lts">lts — litros</SelectItem>
+                        <SelectItem value="mds">mds — mudas</SelectItem>
+                        <SelectItem value="kg">kg — kilos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-full sm:w-36 space-y-1.5">
+                    <Label className="text-xs">Recomendação</Label>
                     <Input
                       type="number"
                       min={0}

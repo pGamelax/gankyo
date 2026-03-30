@@ -51,6 +51,12 @@ export const dashboardRouter = new Elysia({ prefix: "/dashboard" })
         if (last) statusCount[last.status as StatusKey]++;
       }
 
+      const allLanc = ordensF.flatMap((r) => r.lancamentos);
+      const lancDates = allLanc.map((l) => new Date(l.createdAt).getTime());
+      const primeiraOrdemAt = lancDates.length > 0
+        ? new Date(Math.min(...lancDates)).toISOString()
+        : null;
+
       return {
         id: f.id,
         name: f.name,
@@ -60,6 +66,7 @@ export const dashboardRouter = new Elysia({ prefix: "/dashboard" })
         haRealizado,
         pct: haTotal > 0 ? Math.min(100, (haRealizado / haTotal) * 100) : 0,
         statusCount,
+        primeiraOrdemAt,
       };
     });
 
@@ -112,6 +119,7 @@ export const dashboardRouter = new Elysia({ prefix: "/dashboard" })
     // ── Recentes ─────────────────────────────────────────────────
     const recentes = reports.slice(0, 15).map((r) => ({
       id: r.id,
+      fazendaId: r.fazenda.id,
       fazenda: r.fazenda.name,
       talhao: r.talhao.codigo,
       atividade: r.activity.name,

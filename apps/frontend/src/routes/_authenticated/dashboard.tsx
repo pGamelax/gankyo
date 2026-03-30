@@ -1,14 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { apiUrl } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Tractor, FileText, CheckCircle2,
   Clock, RotateCcw, TrendingUp, ArrowRight,
-  AlertTriangle, Wheat,
+  AlertTriangle, Wheat, Calendar,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRouteContext } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -35,6 +37,7 @@ type DashboardData = {
     haRealizado: number;
     pct: number;
     statusCount: Record<StatusKey, number>;
+    primeiraOrdemAt: string | null;
   }[];
   porAtividade: {
     id: string;
@@ -45,6 +48,7 @@ type DashboardData = {
   }[];
   recentes: {
     id: string;
+    fazendaId: string;
     fazenda: string;
     talhao: string;
     atividade: string;
@@ -64,10 +68,10 @@ const statusMeta: Record<StatusKey, {
   text: string;
   bg: string;
 }> = {
-  iniciado:            { label: "Iniciado",     short: "Inic.",   icon: Clock,        variant: "secondary", bar: "bg-amber-400",  text: "text-amber-600",  bg: "bg-amber-50 dark:bg-amber-950/30"  },
-  andamento:           { label: "Em Andamento", short: "Andamento", icon: TrendingUp, variant: "default",   bar: "bg-blue-500",   text: "text-blue-600",   bg: "bg-blue-50 dark:bg-blue-950/30"    },
-  finalizado:          { label: "Finalizado",   short: "Final.",  icon: CheckCircle2, variant: "outline",   bar: "bg-emerald-500",text: "text-emerald-600",bg: "bg-emerald-50 dark:bg-emerald-950/30"},
-  iniciado_finalizado: { label: "Inic./Final.", short: "I/F",     icon: RotateCcw,    variant: "outline",   bar: "bg-emerald-400",text: "text-emerald-600",bg: "bg-emerald-50 dark:bg-emerald-950/30"},
+  iniciado:            { label: "Iniciado",     short: "Inic.",     icon: Clock,        variant: "secondary", bar: "bg-amber-400",   text: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-950/30"   },
+  andamento:           { label: "Em Andamento", short: "Andamento", icon: TrendingUp,   variant: "default",   bar: "bg-blue-500",    text: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/30"     },
+  finalizado:          { label: "Finalizado",   short: "Final.",    icon: CheckCircle2, variant: "outline",   bar: "bg-emerald-500", text: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30"},
+  iniciado_finalizado: { label: "Inic./Final.", short: "I/F",       icon: RotateCcw,    variant: "outline",   bar: "bg-emerald-400", text: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30"},
 };
 
 async function fetchDashboard(): Promise<DashboardData> {
@@ -91,11 +95,24 @@ function pctTextColor(pct: number) {
   return "text-red-600";
 }
 
+function calcForecast(haRealizado: number, haTotal: number, primeiraOrdemAt: string | null): string | null {
+  if (!primeiraOrdemAt || haRealizado === 0 || haTotal === 0) return null;
+  if (haRealizado >= haTotal) return "Concluído";
+
+  const daysSince = (Date.now() - new Date(primeiraOrdemAt).getTime()) / 86_400_000;
+  if (daysSince < 0.5) return null;
+
+  const rate = haRealizado / daysSince;
+  const daysRemaining = (haTotal - haRealizado) / rate;
+  const estimatedEnd = new Date(Date.now() + daysRemaining * 86_400_000);
+  return estimatedEnd.toLocaleDateString("pt-BR");
+}
+
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-muted ${className}`} />;
 }
 
-// ── Componente KPI strip ──────────────────────────────────────────────────────
+// ── KPI strip ──────────────────────────────────────────────────────────────────
 function StatItem({
   label, value, sub, accent = false,
 }: {
@@ -112,7 +129,7 @@ function StatItem({
   );
 }
 
-// ── Componente Fazenda row ────────────────────────────────────────────────────
+// ── Fazenda row ───────────────────────────────────────────────────────────────
 function FazendaRow({
   f, rank,
 }: {
@@ -120,6 +137,13 @@ function FazendaRow({
   rank: number;
 }) {
   const finalizadas = f.statusCount.finalizado + f.statusCount.iniciado_finalizado;
+  const forecast = calcForecast(f.haRealizado, f.haTotal, f.primeiraOrdemAt);
+  const daysSince = f.primeiraOrdemAt
+    ? (Date.now() - new Date(f.primeiraOrdemAt).getTime()) / 86_400_000
+    : null;
+  const rateHaDay = daysSince && daysSince >= 0.5 && f.haRealizado > 0
+    ? f.haRealizado / daysSince
+    : null;
 
   return (
     <div className="grid grid-cols-[2rem_1fr_auto] gap-x-4 items-center px-5 py-3.5 hover:bg-muted/40 transition-colors group">
@@ -142,7 +166,7 @@ function FazendaRow({
           />
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
           <span>{f.talhoes} talhão(ões)</span>
           <span>·</span>
           <span>{f.ordens} ordem(ns)</span>
@@ -159,6 +183,30 @@ function FazendaRow({
             </>
           )}
         </div>
+
+        {/* Métricas de forecast */}
+        {(rateHaDay || forecast) && (
+          <div className="flex items-center gap-3 text-xs flex-wrap pt-0.5">
+            {rateHaDay && (
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <TrendingUp className="h-3 w-3" />
+                ~{rateHaDay.toFixed(1)} ha/dia
+              </span>
+            )}
+            {forecast && forecast !== "Concluído" && (
+              <span className="flex items-center gap-1 font-medium text-foreground">
+                <Calendar className="h-3 w-3" />
+                Previsão: {forecast}
+              </span>
+            )}
+            {forecast === "Concluído" && (
+              <span className="flex items-center gap-1 font-medium text-emerald-600">
+                <CheckCircle2 className="h-3 w-3" />
+                Concluído
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Pct */}
@@ -174,7 +222,7 @@ function FazendaRow({
   );
 }
 
-// ── Componente Atividade row ──────────────────────────────────────────────────
+// ── Atividade row ─────────────────────────────────────────────────────────────
 function AtividadeRow({ a, maxOrdens }: { a: DashboardData["porAtividade"][0]; maxOrdens: number }) {
   const finalizadas = a.statusCount.finalizado + a.statusCount.iniciado_finalizado;
   const widthPct = maxOrdens > 0 ? (a.ordens / maxOrdens) * 100 : 0;
@@ -208,30 +256,45 @@ function DashboardPage() {
   const { session } = useRouteContext({ from: "/_authenticated" });
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: fetchDashboard });
 
-  const statusTotais = data
-    ? data.fazendas.reduce(
-        (acc, f) => {
-          acc.iniciado           += f.statusCount.iniciado;
-          acc.andamento          += f.statusCount.andamento;
-          acc.finalizado         += f.statusCount.finalizado;
-          acc.iniciado_finalizado+= f.statusCount.iniciado_finalizado;
-          return acc;
-        },
-        { iniciado: 0, andamento: 0, finalizado: 0, iniciado_finalizado: 0 }
-      )
-    : null;
+  const [selectedFazendaId, setSelectedFazendaId] = useState<string>("none");
 
-  const ordensFinalizadas  = statusTotais ? statusTotais.finalizado + statusTotais.iniciado_finalizado : 0;
-  const ordensEmAndamento  = statusTotais?.andamento ?? 0;
-  const pctGeral           = data?.totais.haTotal
-    ? Math.min(100, (data.totais.haRealizado / data.totais.haTotal) * 100) : 0;
-  const pctConclusao       = data?.totais.ordens
-    ? (ordensFinalizadas / data.totais.ordens) * 100 : 0;
-  const haRestante         = data ? Math.max(0, data.totais.haTotal - data.totais.haRealizado) : 0;
+  // Dados filtrados por fazenda
+  const fazendasFiltradas = selectedFazendaId !== "none"
+    ? (data?.fazendas ?? []).filter(f => f.id === selectedFazendaId)
+    : data?.fazendas ?? [];
 
-  const fazendasOrdenadas  = data ? [...data.fazendas].sort((a, b) => a.pct - b.pct) : [];
-  const fazendasAlerta     = fazendasOrdenadas.filter((f) => f.pct < 50 && f.ordens > 0).length;
-  const maxAtivOrdens      = data ? Math.max(...data.porAtividade.map((a) => a.ordens), 1) : 1;
+  const recentesFiltrados = selectedFazendaId !== "none"
+    ? (data?.recentes ?? []).filter(r => r.fazendaId === selectedFazendaId)
+    : data?.recentes ?? [];
+
+  // KPIs derivados do filtro
+  const haTotal     = fazendasFiltradas.reduce((s, f) => s + f.haTotal, 0);
+  const haRealizado = fazendasFiltradas.reduce((s, f) => s + f.haRealizado, 0);
+  const ordens      = fazendasFiltradas.reduce((s, f) => s + f.ordens, 0);
+  const haRestante  = Math.max(0, haTotal - haRealizado);
+  const pctGeral    = haTotal > 0 ? Math.min(100, (haRealizado / haTotal) * 100) : 0;
+
+  const statusTotais = fazendasFiltradas.reduce(
+    (acc, f) => {
+      acc.iniciado            += f.statusCount.iniciado;
+      acc.andamento           += f.statusCount.andamento;
+      acc.finalizado          += f.statusCount.finalizado;
+      acc.iniciado_finalizado += f.statusCount.iniciado_finalizado;
+      return acc;
+    },
+    { iniciado: 0, andamento: 0, finalizado: 0, iniciado_finalizado: 0 },
+  );
+
+  const ordensFinalizadas     = statusTotais.finalizado + statusTotais.iniciado_finalizado;
+  const ordensEmAndamento     = statusTotais.andamento;
+  const pctConclusao          = ordens > 0 ? (ordensFinalizadas / ordens) * 100 : 0;
+  const ordensSemLancamento   = selectedFazendaId !== "none"
+    ? 0 // não temos esse dado por fazenda individual
+    : data?.totais.ordensSemLancamento ?? 0;
+
+  const fazendasOrdenadas = [...fazendasFiltradas].sort((a, b) => a.pct - b.pct);
+  const fazendasAlerta    = fazendasOrdenadas.filter(f => f.pct < 50 && f.ordens > 0).length;
+  const maxAtivOrdens     = data ? Math.max(...data.porAtividade.map(a => a.ordens), 1) : 1;
 
   const hoje = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -257,10 +320,10 @@ function DashboardPage() {
                 {ordensEmAndamento} em andamento
               </div>
             )}
-            {data.totais.ordensSemLancamento > 0 && (
+            {ordensSemLancamento > 0 && (
               <div className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
                 <AlertTriangle className="h-3 w-3" />
-                {data.totais.ordensSemLancamento} sem lançamento
+                {ordensSemLancamento} sem lançamento
               </div>
             )}
             {fazendasAlerta > 0 && (
@@ -279,6 +342,24 @@ function DashboardPage() {
         )}
       </div>
 
+      {/* ── Filtro por fazenda ────────────────────────────────────── */}
+      {data && data.fazendas.length > 1 && (
+        <div className="flex items-center gap-2">
+          <Tractor className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Select value={selectedFazendaId} onValueChange={setSelectedFazendaId}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue placeholder="Todas as fazendas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Todas as fazendas</SelectItem>
+              {data.fazendas.map(f => (
+                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* ── KPI Strip ─────────────────────────────────────────────── */}
       <Card className="overflow-hidden">
         {isLoading ? (
@@ -295,8 +376,8 @@ function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0">
             <StatItem
               label="Ha Realizados"
-              value={ha(data.totais.haRealizado, 1)}
-              sub={`de ${ha(data.totais.haTotal, 0)} cadastrados`}
+              value={ha(haRealizado, 1)}
+              sub={`de ${ha(haTotal, 0)} cadastrados`}
               accent
             />
             <StatItem
@@ -306,23 +387,22 @@ function DashboardPage() {
             />
             <StatItem
               label="Ordens de Serviço"
-              value={data.totais.ordens}
-              sub={`${ordensFinalizadas} finalizada(s) · ${data.totais.talhoes} talhão(ões)`}
+              value={ordens}
+              sub={`${ordensFinalizadas} finalizada(s) · ${selectedFazendaId === "none" ? data.totais.talhoes : fazendasFiltradas.reduce((s, f) => s + f.talhoes, 0)} talhão(ões)`}
             />
             <StatItem
               label="Taxa de Conclusão"
               value={`${pctConclusao.toFixed(0)}%`}
-              sub={`${data.totais.fazendas} fazenda(s) · ${ordensEmAndamento} em andamento`}
+              sub={`${fazendasFiltradas.length} fazenda(s) · ${ordensEmAndamento} em andamento`}
             />
           </div>
         )}
       </Card>
 
       {/* ── Barra de progresso geral + distribuição ───────────────── */}
-      {data && statusTotais && (
+      {data && (
         <Card>
           <CardContent className="pt-5 pb-4 space-y-3">
-            {/* Progresso geral */}
             <div className="flex items-center justify-between text-sm">
               <span className="font-semibold">Progresso Geral de Área</span>
               <span className={`font-bold tabular-nums ${pctTextColor(pctGeral)}`}>
@@ -336,27 +416,26 @@ function DashboardPage() {
               />
             </div>
 
-            {data.totais.ordens > 0 && (
+            {ordens > 0 && (
               <>
                 <Separator className="my-1" />
 
-                {/* Distribuição de status */}
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-semibold">Distribuição por Status</span>
-                  <span className="text-xs text-muted-foreground">{data.totais.ordens} ordens</span>
+                  <span className="text-xs text-muted-foreground">{ordens} ordens</span>
                 </div>
                 <div className="flex h-2.5 w-full rounded-full overflow-hidden gap-0.5">
                   {statusTotais.andamento > 0 && (
-                    <div className="bg-blue-500" style={{ width: `${(statusTotais.andamento / data.totais.ordens) * 100}%` }} />
+                    <div className="bg-blue-500" style={{ width: `${(statusTotais.andamento / ordens) * 100}%` }} />
                   )}
                   {statusTotais.iniciado > 0 && (
-                    <div className="bg-amber-400" style={{ width: `${(statusTotais.iniciado / data.totais.ordens) * 100}%` }} />
+                    <div className="bg-amber-400" style={{ width: `${(statusTotais.iniciado / ordens) * 100}%` }} />
                   )}
                   {(statusTotais.finalizado + statusTotais.iniciado_finalizado) > 0 && (
-                    <div className="bg-emerald-500" style={{ width: `${((statusTotais.finalizado + statusTotais.iniciado_finalizado) / data.totais.ordens) * 100}%` }} />
+                    <div className="bg-emerald-500" style={{ width: `${((statusTotais.finalizado + statusTotais.iniciado_finalizado) / ordens) * 100}%` }} />
                   )}
-                  {data.totais.ordensSemLancamento > 0 && (
-                    <div className="bg-muted-foreground/30" style={{ width: `${(data.totais.ordensSemLancamento / data.totais.ordens) * 100}%` }} />
+                  {ordensSemLancamento > 0 && (
+                    <div className="bg-muted-foreground/30" style={{ width: `${(ordensSemLancamento / ordens) * 100}%` }} />
                   )}
                 </div>
                 <div className="flex flex-wrap gap-x-5 gap-y-1">
@@ -364,15 +443,15 @@ function DashboardPage() {
                     ["andamento",  statusTotais.andamento,  "bg-blue-500",    "Em Andamento"],
                     ["iniciado",   statusTotais.iniciado,   "bg-amber-400",   "Iniciado"],
                     ["finalizado", statusTotais.finalizado + statusTotais.iniciado_finalizado, "bg-emerald-500", "Finalizados"],
-                    ...(data.totais.ordensSemLancamento > 0
-                      ? [["sem", data.totais.ordensSemLancamento, "bg-muted-foreground/30", "Sem lançamento"]] as const
+                    ...(ordensSemLancamento > 0
+                      ? [["sem", ordensSemLancamento, "bg-muted-foreground/30", "Sem lançamento"]] as const
                       : []),
                   ] as const).filter(([, count]) => count > 0).map(([key, count, color, label]) => (
                     <div key={key} className="flex items-center gap-1.5 text-xs">
                       <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${color}`} />
                       <span className="text-muted-foreground">{label}</span>
                       <span className="font-semibold tabular-nums">{count}</span>
-                      <span className="text-muted-foreground">({((count / data.totais.ordens) * 100).toFixed(0)}%)</span>
+                      <span className="text-muted-foreground">({((count / ordens) * 100).toFixed(0)}%)</span>
                     </div>
                   ))}
                 </div>
@@ -385,17 +464,14 @@ function DashboardPage() {
       {/* ── Grid principal ─────────────────────────────────────────── */}
       <div className="grid gap-5 lg:grid-cols-3">
 
-        {/* ── Fazendas ─────────────────────────────────────── 2/3 ── */}
+        {/* ── Fazendas ──────────────────────────────────────── 2/3 ── */}
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between px-0.5">
             <h2 className="text-sm font-semibold">Desempenho por Fazenda</h2>
-            <span className="text-xs text-muted-foreground">
-              Ordenado por progresso ↑
-            </span>
+            <span className="text-xs text-muted-foreground">Ordenado por progresso ↑</span>
           </div>
 
           <Card className="overflow-hidden">
-            {/* Cabeçalho da tabela */}
             <div className="grid grid-cols-[2rem_1fr_4rem] gap-x-4 px-5 py-2.5 bg-muted/60 border-b text-xs font-medium text-muted-foreground uppercase tracking-wide">
               <span className="text-center">#</span>
               <span>Fazenda</span>
@@ -417,7 +493,7 @@ function DashboardPage() {
             ) : fazendasOrdenadas.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14 gap-3">
                 <Tractor className="h-10 w-10 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">Nenhuma fazenda cadastrada</p>
+                <p className="text-sm text-muted-foreground">Nenhuma fazenda encontrada</p>
               </div>
             ) : (
               <div className="divide-y">
@@ -494,14 +570,14 @@ function DashboardPage() {
                     </div>
                   ))}
                 </div>
-              ) : data?.recentes.length === 0 ? (
+              ) : recentesFiltrados.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-2">
                   <FileText className="h-8 w-8 text-muted-foreground/30" />
                   <p className="text-xs text-muted-foreground">Sem atividades</p>
                 </div>
               ) : (
                 <div className="divide-y">
-                  {data?.recentes.slice(0, 8).map((r) => {
+                  {recentesFiltrados.slice(0, 8).map((r) => {
                     const meta   = r.ultimoStatus ? statusMeta[r.ultimoStatus] : null;
                     const pct    = r.haTalhao > 0 ? Math.min(100, (r.haRealizado / r.haTalhao) * 100) : 0;
                     const dias   = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86_400_000);

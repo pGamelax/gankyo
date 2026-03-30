@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/reports/$id")({
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Insumo     = { id: string; nome: string; recomendacaoHa: number };
+type Insumo     = { id: string; nome: string; unidade: string; recomendacaoHa: number };
 type LancamentoInsumo = { id: string; reportInsumoId: string; quantidade: number };
 type Lancamento = { id: string; hectares: number; status: string; data: string; createdAt: string; _pending?: boolean; insumos: LancamentoInsumo[] };
 type ReportDetail = {
@@ -91,6 +91,7 @@ function ReportDetailPage() {
   const [editingLanc,     setEditingLanc    ] = useState<Lancamento | null>(null);
   const [copiedId,        setCopiedId       ] = useState<string | null>(null);
   const [hectares,        setHectares       ] = useState("");
+  const [mudasInput,      setMudasInput     ] = useState("");
   const [status,          setStatus         ] = useState<StatusValue>("iniciado");
   const [data,            setData           ] = useState(todayStr());
   const [insumoValues,    setInsumoValues   ] = useState<Record<string, string>>({});
@@ -109,6 +110,10 @@ function ReportDetailPage() {
   const haRestante     = Math.max(0, areaTotal - totalHaLancado);
   const pct            = areaTotal > 0 ? Math.min(100, (totalHaLancado / areaTotal) * 100) : 0;
 
+  // Se houver insumo com unidade "mds", o lançamento é baseado em mudas
+  const mudasInsumo = report?.insumos.find(ins => ins.unidade === "mds") ?? null;
+  const isMudasMode = !!mudasInsumo;
+
   function calcInsumos(ha: number): Record<string, string> {
     if (!report || ha <= 0) return {};
     return Object.fromEntries(
@@ -122,10 +127,37 @@ function ReportDetailPage() {
     setInsumoValues(calcInsumos(ha));
   }
 
+  function handleMudasChange(val: string) {
+    setMudasInput(val);
+    const mudas = parseFloat(val) || 0;
+    const ha = mudasInsumo && mudasInsumo.recomendacaoHa > 0
+      ? mudas / mudasInsumo.recomendacaoHa
+      : 0;
+    const haStr = ha > 0 ? ha.toFixed(4) : "";
+    setHectares(haStr);
+    if (ha > 0 && report) {
+      const vals = Object.fromEntries(
+        report.insumos.map(ins =>
+          ins.id === mudasInsumo!.id
+            ? [ins.id, val]
+            : [ins.id, (ha * ins.recomendacaoHa).toFixed(2)]
+        )
+      );
+      setInsumoValues(vals);
+    } else {
+      setInsumoValues({});
+    }
+  }
+
   function fillRestante() {
     const ha = haRestante > 0 ? haRestante : 0;
-    setHectares(String(ha));
-    setInsumoValues(calcInsumos(ha));
+    if (isMudasMode && mudasInsumo) {
+      const mudas = ha * mudasInsumo.recomendacaoHa;
+      handleMudasChange(String(mudas));
+    } else {
+      setHectares(String(ha));
+      setInsumoValues(calcInsumos(ha));
+    }
   }
 
   const haNum = parseFloat(hectares) || 0;
@@ -209,7 +241,10 @@ function ReportDetailPage() {
   function openEdit(l: Lancamento) {
     setEditingLanc(l);
     setHectares(String(l.hectares));
-    // Usa valores salvos; se não houver, calcula da área
+    if (isMudasMode && mudasInsumo) {
+      const savedMudas = l.insumos?.find(li => li.reportInsumoId === mudasInsumo.id);
+      setMudasInput(savedMudas ? String(savedMudas.quantidade) : String(l.hectares * mudasInsumo.recomendacaoHa));
+    }
     if (l.insumos && l.insumos.length > 0) {
       setInsumoValues(Object.fromEntries(l.insumos.map(li => [li.reportInsumoId, String(li.quantidade)])));
     } else {
@@ -241,7 +276,7 @@ function ReportDetailPage() {
       for (const ins of report.insumos) {
         const saved = l.insumos?.find(li => li.reportInsumoId === ins.id);
         const raw = saved ? saved.quantidade : l.hectares * ins.recomendacaoHa;
-        lines.push(`${ins.nome}: ${raw.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`);
+        lines.push(`${ins.nome}: ${raw.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} ${ins.unidade}`);
       }
     }
 
@@ -251,12 +286,13 @@ function ReportDetailPage() {
     });
   }
 
-  function openDialog()  { setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus(hasIniciado ? "andamento" : "iniciado"); setData(todayStr()); setFormError(null); setDialogOpen(true); }
-  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); }
+  function openDialog()  { setEditingLanc(null); setHectares(""); setMudasInput(""); setInsumoValues({}); setStatus(hasIniciado ? "andamento" : "iniciado"); setData(todayStr()); setFormError(null); setDialogOpen(true); }
+  function closeDialog() { setDialogOpen(false); setEditingLanc(null); setHectares(""); setMudasInput(""); setInsumoValues({}); setStatus("iniciado"); setData(todayStr()); setFormError(null); }
 
   async function handleLancar(e: React.FormEvent) {
     e.preventDefault();
-    if (!hectares || haNum <= 0) { setFormError("Informe a quantidade de hectares."); return; }
+    if (isMudasMode && (!mudasInput || (parseFloat(mudasInput) || 0) <= 0)) { setFormError("Informe a quantidade de mudas."); return; }
+    if (!isMudasMode && (!hectares || haNum <= 0)) { setFormError("Informe a quantidade de hectares."); return; }
 
     // Se offline: enfileira + insere lancamento optimista no cache
     if (!navigator.onLine) {
@@ -398,7 +434,7 @@ function ReportDetailPage() {
                 <div key={ins.id} className="flex items-center justify-between py-2.5">
                   <span className="text-sm font-medium">{ins.nome}</span>
                   <span className="text-sm text-muted-foreground">
-                    {ins.recomendacaoHa.toLocaleString("pt-BR")} / ha
+                    {ins.recomendacaoHa.toLocaleString("pt-BR")} {ins.unidade} / ha
                   </span>
                 </div>
               ))}
@@ -570,58 +606,120 @@ function ReportDetailPage() {
               </Select>
             </div>
 
-            {/* Hectares */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="lancamento-ha">Hectares realizados *</Label>
-                {haRestante > 0 && !editingLanc && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={fillRestante}
-                  >
-                    Preencher restante ({haRestante.toLocaleString("pt-BR")} ha)
-                  </button>
+            {isMudasMode ? (
+              /* ── Modo mudas: entrada por quantidade de mudas ── */
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="lancamento-mudas">Mudas utilizadas *</Label>
+                    {haRestante > 0 && !editingLanc && mudasInsumo && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={fillRestante}
+                      >
+                        Preencher restante ({(haRestante * mudasInsumo.recomendacaoHa).toLocaleString("pt-BR")} mds)
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    id="lancamento-mudas"
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Ex: 5000"
+                    value={mudasInput}
+                    onChange={e => handleMudasChange(e.target.value)}
+                    disabled={lancar.isPending}
+                  />
+                </div>
+                {haNum > 0 && (
+                  <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                    Equivalente a <strong className="text-foreground">{haNum.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ha</strong>
+                  </div>
+                )}
+                {/* Outros insumos (não mds) */}
+                {report.insumos.filter(ins => ins.unidade !== "mds").length > 0 && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Outros insumos
+                      {haNum > 0 && <span className="font-normal ml-1">— para {haNum.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ha</span>}
+                    </p>
+                    {report.insumos.filter(ins => ins.unidade !== "mds").map(ins => (
+                      <div key={ins.id} className="flex items-center gap-3">
+                        <span className="text-sm text-muted-foreground flex-1 min-w-0 truncate">{ins.nome}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="w-28 h-8 text-sm text-right"
+                            placeholder="0.00"
+                            value={insumoValues[ins.id] ?? ""}
+                            onChange={e => setInsumoValues(prev => ({ ...prev, [ins.id]: e.target.value }))}
+                            disabled={lancar.isPending || editLanc.isPending}
+                          />
+                          <span className="text-xs text-muted-foreground w-8">{ins.unidade}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-              <Input
-                id="lancamento-ha"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Ex: 5.00"
-                value={hectares}
-                onChange={e => handleHectaresChange(e.target.value)}
-                disabled={lancar.isPending}
-              />
-            </div>
-
-            {/* Insumos editáveis — auto-calculados, mas editáveis */}
-            {report.insumos.length > 0 && (
-              <div className="rounded-md border p-3 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Insumos utilizados
-                  {haNum > 0 && <span className="font-normal ml-1">— calculado para {haNum.toLocaleString("pt-BR")} ha</span>}
-                </p>
-                {report.insumos.map(ins => (
-                  <div key={ins.id} className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground flex-1 min-w-0 truncate">{ins.nome}</span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-28 h-8 text-sm text-right"
-                        placeholder="0.00"
-                        value={insumoValues[ins.id] ?? ""}
-                        onChange={e => setInsumoValues(prev => ({ ...prev, [ins.id]: e.target.value }))}
-                        disabled={lancar.isPending || editLanc.isPending}
-                      />
-                      <span className="text-xs text-muted-foreground w-6">un</span>
-                    </div>
+            ) : (
+              /* ── Modo padrão: entrada por hectares ── */
+              <>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="lancamento-ha">Hectares realizados *</Label>
+                    {haRestante > 0 && !editingLanc && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={fillRestante}
+                      >
+                        Preencher restante ({haRestante.toLocaleString("pt-BR")} ha)
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <Input
+                    id="lancamento-ha"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="Ex: 5.00"
+                    value={hectares}
+                    onChange={e => handleHectaresChange(e.target.value)}
+                    disabled={lancar.isPending}
+                  />
+                </div>
+                {report.insumos.length > 0 && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Insumos utilizados
+                      {haNum > 0 && <span className="font-normal ml-1">— calculado para {haNum.toLocaleString("pt-BR")} ha</span>}
+                    </p>
+                    {report.insumos.map(ins => (
+                      <div key={ins.id} className="flex items-center gap-3">
+                        <span className="text-sm text-muted-foreground flex-1 min-w-0 truncate">{ins.nome}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="w-28 h-8 text-sm text-right"
+                            placeholder="0.00"
+                            value={insumoValues[ins.id] ?? ""}
+                            onChange={e => setInsumoValues(prev => ({ ...prev, [ins.id]: e.target.value }))}
+                            disabled={lancar.isPending || editLanc.isPending}
+                          />
+                          <span className="text-xs text-muted-foreground w-8">{ins.unidade}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {formError && (
