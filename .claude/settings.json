@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec gankyo-backend-4javk9.1.5x9j1rsacxl28mvrdbkoicjvx bun -e ':*)",
+      "Bash(docker exec:*)",
+      "Bash(ssh root@srv1497317 \"docker ps --format '{{.Names}}' | grep gankyo\")",
+      "Bash(ssh root@srv1497317 \"docker ps --format '{{.Names}}' | grep -i postgres\")"
+    ]
+  }
+}
