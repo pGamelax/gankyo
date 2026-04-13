@@ -23,7 +23,10 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await signIn.username({ username, password });
+      const isEmail = username.includes("@");
+      const { error } = isEmail
+        ? await signIn.email({ email: username, password })
+        : await signIn.username({ username, password });
       if (error) throw new Error(error.message ?? "Erro ao entrar");
       navigate({ to: "/dashboard" });
     } catch (err) {
@@ -156,11 +159,11 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="username">Usuário</Label>
+              <Label htmlFor="username">Usuário ou Email</Label>
               <Input
                 id="username"
                 type="text"
-                placeholder="pedro.gamela"
+                placeholder="pedro.gamela ou admin@admin.com"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
