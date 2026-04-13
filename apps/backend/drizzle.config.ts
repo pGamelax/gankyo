@@ -7,6 +7,6 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },
-  // Tabelas gerenciadas pelo better-auth — não tocar no push
-  tablesFilter: ["!user", "!session", "!account", "!verification"],
+  // Só gerencia tabelas da app — better-auth cuida das suas próprias
+  tablesFilter: ["fazenda", "talhao", "activity", "report", "report_insumo", "lancamento", "lancamento_insumo", "regra_programacao", "user_preferences"],
 });
